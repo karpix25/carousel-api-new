@@ -16,14 +16,14 @@ const CONFIG = {
     BORDER_RADIUS: 64
   },
   FONTS: {
-    TITLE_INTRO: 'bold 128px "DejaVu Sans", "Liberation Sans", "Noto Color Emoji", ui-sans-serif, system-ui, sans-serif',
-    SUBTITLE_INTRO: '64px "DejaVu Sans", "Liberation Sans", "Noto Color Emoji", ui-sans-serif, system-ui, sans-serif',
-    TITLE_TEXT_WITH_CONTENT: 'bold 96px "DejaVu Sans", "Liberation Sans", "Noto Color Emoji", ui-sans-serif, system-ui, sans-serif',
-    TITLE_TEXT_ONLY: 'bold 136px "DejaVu Sans", "Liberation Sans", "Noto Color Emoji", ui-sans-serif, system-ui, sans-serif',
-    TEXT: '56px "DejaVu Sans", "Liberation Sans", "Noto Color Emoji", ui-sans-serif, system-ui, sans-serif',
-    QUOTE_LARGE: 'bold 96px "DejaVu Sans", "Liberation Sans", "Noto Color Emoji", ui-sans-serif, system-ui, sans-serif',
-    QUOTE_SMALL: 'bold 64px "DejaVu Sans", "Liberation Sans", "Noto Color Emoji", ui-sans-serif, system-ui, sans-serif',
-    HEADER_FOOTER: '40px "DejaVu Sans", "Liberation Sans", "Noto Color Emoji", ui-sans-serif, system-ui, sans-serif'
+    TITLE_INTRO: 'bold 128px Arial',
+    SUBTITLE_INTRO: '64px Arial',
+    TITLE_TEXT_WITH_CONTENT: 'bold 96px Arial',
+    TITLE_TEXT_ONLY: 'bold 136px Arial',
+    TEXT: '56px Arial',
+    QUOTE_LARGE: 'bold 96px Arial',
+    QUOTE_SMALL: 'bold 64px Arial',
+    HEADER_FOOTER: '40px Arial'
   },
   COLORS: {
     DEFAULT_BG: '#ffffff',
@@ -32,79 +32,24 @@ const CONFIG = {
   }
 };
 
-// УЛУЧШЕННАЯ функция переносов с висячими предлогами (БЕЗ токенизации)
+// Утилиты
 function wrapText(ctx, text, maxWidth) {
   if (!text) return [];
   
-  // Нормализуем пробелы (простая очистка)
-  text = text.trim().replace(/\s+/g, ' ');
-  
   const words = text.split(' ');
   const lines = [];
-  let currentLine = '';
+  let currentLine = words[0] || '';
 
-  // Висячие предлоги (короткие слова которые нельзя оставлять в конце строки)
-  const hangingWords = [
-    'и', 'а', 'но', 'да', 'или', 'либо', 'то', 'не', 'ни', 
-    'за', 'для', 'без', 'при', 'про', 'под', 'над', 'через', 'между', 
-    'из', 'от', 'до', 'на', 'в', 'с', 'у', 'о', 'об', 'во', 'со', 'ко',
-    'что', 'как', 'где', 'когда', 'если', 'чтобы', 'который', 'которая'
-  ];
-  
-  for (let i = 0; i < words.length; i++) {
+  for (let i = 1; i < words.length; i++) {
     const word = words[i];
-    const nextWord = words[i + 1];
-    const testLine = currentLine ? `${currentLine} ${word}` : word;
-    
+    const testLine = currentLine + ' ' + word;
     const width = ctx.measureText(testLine).width;
     
-    if (width <= maxWidth) {
+    if (width < maxWidth) {
       currentLine = testLine;
-      
-      // Проверяем висячие предлоги
-      if (nextWord && hangingWords.includes(word.toLowerCase())) {
-        // Пытаемся добавить следующее слово, чтобы избежать висячего предлога
-        const testWithNext = `${currentLine} ${nextWord}`;
-        const widthWithNext = ctx.measureText(testWithNext).width;
-        
-        if (widthWithNext <= maxWidth) {
-          currentLine = testWithNext;
-          i++; // Пропускаем следующее слово, так как уже добавили
-        }
-      }
     } else {
-      if (currentLine) {
-        // Проверяем последнее слово на висячий предлог
-        const lastWord = currentLine.split(' ').pop();
-        
-        if (lastWord && hangingWords.includes(lastWord.toLowerCase())) {
-          // Переносим висячий предлог на следующую строку
-          const wordsInLine = currentLine.split(' ');
-          const withoutLastWord = wordsInLine.slice(0, -1).join(' ');
-          
-          if (withoutLastWord) {
-            lines.push(withoutLastWord);
-            currentLine = `${lastWord} ${word}`;
-          } else {
-            // Если вся строка состоит из одного висячего слова
-            lines.push(currentLine);
-            currentLine = word;
-          }
-        } else {
-          lines.push(currentLine);
-          currentLine = word;
-        }
-      } else {
-        // Слово слишком длинное для строки
-        if (word.length > 20) {
-          const chunks = word.match(/.{1,15}/g) || [word];
-          lines.push(...chunks.slice(0, -1));
-          currentLine = chunks[chunks.length - 1];
-        } else {
-          lines.push(word);
-          currentLine = '';
-        }
-      }
+      lines.push(currentLine);
+      currentLine = word;
     }
   }
   
@@ -197,11 +142,6 @@ function renderSlideToCanvas(slide, slideNumber, totalSlides, settings) {
 
   const canvas = createCanvas(CONFIG.CANVAS.WIDTH, CONFIG.CANVAS.HEIGHT);
   const ctx = canvas.getContext('2d');
-  
-  // Включаем сглаживание для эмодзи
-  ctx.textRenderingOptimization = 'optimizeQuality';
-  ctx.imageSmoothingEnabled = true;
-  ctx.imageSmoothingQuality = 'high';
   
   // Цвета
   const isAccent = slide.color === 'accent';
@@ -297,45 +237,27 @@ function renderTextSlide(ctx, slide, contentY, contentWidth) {
     if (hasText) y += 64;
   }
 
-  // Текст с улучшенной обработкой списков
+  // Текст
   if (slide.text) {
     ctx.font = CONFIG.FONTS.TEXT;
     ctx.textAlign = 'left';
     
     const textLines = slide.text.split('\n');
-    
     textLines.forEach(line => {
       if (line.trim().startsWith('•')) {
-        // Улучшенная логика для списков
         const itemText = line.replace(/^•\s*/, '');
-        
-        // Рендерим буллет
-        const bulletX = CONFIG.CANVAS.PADDING;
-        ctx.fillText('•', bulletX, y);
-        
-        // Вычисляем отступ для текста
-        const bulletWidth = ctx.measureText('• ').width;
-        const textX = bulletX + bulletWidth;
-        const availableWidth = contentWidth - bulletWidth;
-        
-        // Переносим текст с учетом доступной ширины
-        const wrappedLines = wrapText(ctx, itemText, availableWidth);
-        
-        wrappedLines.forEach((wrappedLine, index) => {
-          ctx.fillText(wrappedLine, textX, y + (index * 72));
+        const wrappedLines = wrapText(ctx, '• ' + itemText, contentWidth);
+        wrappedLines.forEach(wrappedLine => {
+          ctx.fillText(wrappedLine, CONFIG.CANVAS.PADDING, y);
+          y += 72;
         });
-        
-        y += wrappedLines.length * 72;
-        
       } else if (line.trim()) {
-        // Обычный текст
         const wrappedLines = wrapText(ctx, line.trim(), contentWidth);
         wrappedLines.forEach(wrappedLine => {
           ctx.fillText(wrappedLine, CONFIG.CANVAS.PADDING, y);
           y += 72;
         });
       } else {
-        // Пустая строка
         y += 32;
       }
     });
@@ -362,16 +284,15 @@ function renderQuoteSlide(ctx, slide, contentY, contentHeight, contentWidth) {
 app.get('/health', (req, res) => {
   res.json({ 
     status: 'production-ready',
-    engine: 'canvas-api-perfect',
+    engine: 'canvas-api',
     performance: 'optimized',
-    memory: 'efficient',
-    features: ['emoji-support', 'smart-wrapping', 'hanging-prevention']
+    memory: 'efficient'
   });
 });
 
 app.post('/api/generate-carousel', async (req, res) => {
   const startTime = Date.now();
-  console.log('🎯 Генерация через Canvas API с умными переносами...');
+  console.log('🎯 Генерация через Canvas API...');
   
   try {
     const { text, settings = {} } = req.body;
@@ -379,10 +300,6 @@ app.post('/api/generate-carousel', async (req, res) => {
     if (!text) {
       return res.status(400).json({ error: 'Требуется текст' });
     }
-
-    // Проверяем наличие эмодзи в тексте
-    const hasEmoji = /[\u{1F600}-\u{1F64F}]|[\u{1F300}-\u{1F5FF}]|[\u{1F680}-\u{1F6FF}]|[\u{1F1E0}-\u{1F1FF}]|[\u{2600}-\u{26FF}]|[\u{2700}-\u{27BF}]/u.test(text);
-    console.log(`📝 Обнаружены эмодзи: ${hasEmoji ? 'да' : 'нет'}`);
 
     // Парсинг
     const slides = parseMarkdownToSlides(text);
@@ -401,25 +318,9 @@ app.post('/api/generate-carousel', async (req, res) => {
     // Рендеринг
     const images = [];
     for (let i = 0; i < slides.length; i++) {
-      try {
-        const canvas = renderSlideToCanvas(slides[i], i + 1, slides.length, settings);
-        const base64 = canvas.toBuffer('image/png').toString('base64');
-        images.push(base64);
-        console.log(`✅ Слайд ${i + 1} готов`);
-      } catch (slideError) {
-        console.error(`❌ Ошибка при рендеринге слайда ${i + 1}:`, slideError.message);
-        // Создаем fallback слайд при ошибке
-        const fallbackCanvas = createCanvas(CONFIG.CANVAS.WIDTH, CONFIG.CANVAS.HEIGHT);
-        const fallbackCtx = fallbackCanvas.getContext('2d');
-        fallbackCtx.fillStyle = '#ffffff';
-        fallbackCtx.fillRect(0, 0, CONFIG.CANVAS.WIDTH, CONFIG.CANVAS.HEIGHT);
-        fallbackCtx.fillStyle = '#000000';
-        fallbackCtx.font = '48px Arial';
-        fallbackCtx.textAlign = 'center';
-        fallbackCtx.fillText('Ошибка рендеринга', CONFIG.CANVAS.WIDTH / 2, CONFIG.CANVAS.HEIGHT / 2);
-        const fallbackBase64 = fallbackCanvas.toBuffer('image/png').toString('base64');
-        images.push(fallbackBase64);
-      }
+      const canvas = renderSlideToCanvas(slides[i], i + 1, slides.length, settings);
+      const base64 = canvas.toBuffer('image/png').toString('base64');
+      images.push(base64);
     }
 
     const processingTime = Date.now() - startTime;
@@ -433,13 +334,7 @@ app.post('/api/generate-carousel', async (req, res) => {
         generatedAt: new Date().toISOString(),
         processingTime,
         settings,
-        engine: 'canvas-api-perfect',
-        features: {
-          emojiSupport: true,
-          smartWrapping: true,
-          hangingPrevention: true,
-          hasEmoji
-        }
+        engine: 'canvas-api-production'
       }
     });
 
@@ -452,39 +347,6 @@ app.post('/api/generate-carousel', async (req, res) => {
   }
 });
 
-// Дополнительный endpoint для тестирования эмодзи
-app.post('/api/test-emoji', async (req, res) => {
-  try {
-    const testText = "🚀 Тест эмодзи: 🎯 💪 ✨ 📱 🔥 💡 🎨 ⚡";
-    
-    const canvas = createCanvas(800, 200);
-    const ctx = canvas.getContext('2d');
-    
-    ctx.fillStyle = '#ffffff';
-    ctx.fillRect(0, 0, 800, 200);
-    
-    ctx.fillStyle = '#000000';
-    ctx.font = '48px "DejaVu Sans", "Liberation Sans", "Noto Color Emoji", sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillText(testText, 400, 100);
-    
-    const base64 = canvas.toBuffer('image/png').toString('base64');
-    
-    res.json({
-      success: true,
-      testText,
-      image: base64,
-      message: 'Эмодзи тест завершен'
-    });
-    
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      error: error.message
-    });
-  }
-});
-
 // Graceful shutdown
 process.on('SIGTERM', () => {
   console.log('🛑 Graceful shutdown');
@@ -493,7 +355,6 @@ process.on('SIGTERM', () => {
 
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => {
-  console.log(`🚀 PRODUCTION Canvas API с умными переносами на порту ${PORT}`);
+  console.log(`🚀 PRODUCTION Canvas API на порту ${PORT}`);
   console.log(`⚡ Готов к высоким нагрузкам`);
-  console.log(`🎯 Фичи: эмодзи, умные переносы, предотвращение висячих предлогов`);
 });
