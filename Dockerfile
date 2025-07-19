@@ -1,6 +1,9 @@
 FROM node:18-alpine
 
+# Устанавливаем build tools И canvas зависимости
 RUN apk add --no-cache \
+    make \
+    g++ \
     cairo-dev \
     jpeg-dev \
     pango-dev \
