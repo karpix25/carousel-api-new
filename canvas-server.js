@@ -16,14 +16,14 @@ const CONFIG = {
     BORDER_RADIUS: 64
   },
   FONTS: {
-    TITLE_INTRO: 'bold 128px Arial',
-    SUBTITLE_INTRO: '64px Arial',
-    TITLE_TEXT_WITH_CONTENT: 'bold 96px Arial',
-    TITLE_TEXT_ONLY: 'bold 136px Arial',
-    TEXT: '56px Arial',
-    QUOTE_LARGE: 'bold 96px Arial',
-    QUOTE_SMALL: 'bold 64px Arial',
-    HEADER_FOOTER: '40px Arial'
+    TITLE_INTRO: 'bold 128px "DejaVu Sans", "Liberation Sans", "Noto Color Emoji", Arial, sans-serif',
+    SUBTITLE_INTRO: '64px "DejaVu Sans", "Liberation Sans", "Noto Color Emoji", Arial, sans-serif',
+    TITLE_TEXT_WITH_CONTENT: 'bold 96px "DejaVu Sans", "Liberation Sans", "Noto Color Emoji", Arial, sans-serif',
+    TITLE_TEXT_ONLY: 'bold 136px "DejaVu Sans", "Liberation Sans", "Noto Color Emoji", Arial, sans-serif',
+    TEXT: '56px "DejaVu Sans", "Liberation Sans", "Noto Color Emoji", Arial, sans-serif',
+    QUOTE_LARGE: 'bold 96px "DejaVu Sans", "Liberation Sans", "Noto Color Emoji", Arial, sans-serif',
+    QUOTE_SMALL: 'bold 64px "DejaVu Sans", "Liberation Sans", "Noto Color Emoji", Arial, sans-serif',
+    HEADER_FOOTER: '40px "DejaVu Sans", "Liberation Sans", "Noto Color Emoji", Arial, sans-serif'
   },
   COLORS: {
     DEFAULT_BG: '#ffffff',
@@ -162,6 +162,11 @@ function renderSlideToCanvas(slide, slideNumber, totalSlides, settings) {
 
   const canvas = createCanvas(CONFIG.CANVAS.WIDTH, CONFIG.CANVAS.HEIGHT);
   const ctx = canvas.getContext('2d');
+  
+  // Настройки для качественного рендеринга эмодзи
+  ctx.textRenderingOptimization = 'optimizeQuality';
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
   
   // Цвета
   const isAccent = slide.color === 'accent';
@@ -304,15 +309,49 @@ function renderQuoteSlide(ctx, slide, contentY, contentHeight, contentWidth) {
 app.get('/health', (req, res) => {
   res.json({ 
     status: 'production-ready',
-    engine: 'canvas-api',
+    engine: 'canvas-api-with-emoji',
     performance: 'optimized',
-    memory: 'efficient'
+    memory: 'efficient',
+    features: ['emoji-support', 'smart-wrapping', 'hanging-prevention']
   });
+});
+
+// Дополнительный endpoint для тестирования эмодзи
+app.post('/api/test-emoji', async (req, res) => {
+  try {
+    const testText = "🚀 Тест эмодзи: 🎯 💪 ✨ 📱 🔥 💡 🎨 ⚡";
+    
+    const canvas = createCanvas(800, 200);
+    const ctx = canvas.getContext('2d');
+    
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, 800, 200);
+    
+    ctx.fillStyle = '#000000';
+    ctx.font = '48px "DejaVu Sans", "Liberation Sans", "Noto Color Emoji", Arial, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(testText, 400, 100);
+    
+    const base64 = canvas.toBuffer('image/png').toString('base64');
+    
+    res.json({
+      success: true,
+      testText,
+      image: base64,
+      message: 'Эмодзи тест завершен'
+    });
+    
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
 });
 
 app.post('/api/generate-carousel', async (req, res) => {
   const startTime = Date.now();
-  console.log('🎯 Генерация через Canvas API...');
+      console.log('🎯 Генерация через Canvas API с эмодзи...');
   
   try {
     const { text, settings = {} } = req.body;
@@ -320,6 +359,10 @@ app.post('/api/generate-carousel', async (req, res) => {
     if (!text) {
       return res.status(400).json({ error: 'Требуется текст' });
     }
+
+    // Проверяем наличие эмодзи в тексте
+    const hasEmoji = /[\u{1F600}-\u{1F64F}]|[\u{1F300}-\u{1F5FF}]|[\u{1F680}-\u{1F6FF}]|[\u{1F1E0}-\u{1F1FF}]|[\u{2600}-\u{26FF}]|[\u{2700}-\u{27BF}]/u.test(text);
+    console.log(`📝 Обнаружены эмодзи: ${hasEmoji ? 'да' : 'нет'}`);
 
     // Парсинг
     const slides = parseMarkdownToSlides(text);
@@ -354,7 +397,13 @@ app.post('/api/generate-carousel', async (req, res) => {
         generatedAt: new Date().toISOString(),
         processingTime,
         settings,
-        engine: 'canvas-api-production'
+        engine: 'canvas-api-with-emoji',
+        features: {
+          emojiSupport: true,
+          smartWrapping: true,
+          hangingPrevention: true,
+          hasEmoji
+        }
       }
     });
 
@@ -375,6 +424,7 @@ process.on('SIGTERM', () => {
 
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => {
-  console.log(`🚀 PRODUCTION Canvas API на порту ${PORT}`);
+  console.log(`🚀 PRODUCTION Canvas API с эмодзи на порту ${PORT}`);
   console.log(`⚡ Готов к высоким нагрузкам`);
+  console.log(`🎯 Фичи: эмодзи, умные переносы, предотвращение висячих предлогов`);
 });
