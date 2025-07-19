@@ -38,7 +38,7 @@ function isEmoji(char) {
   return emojiRegex.test(char);
 }
 
-// Улучшенная функция переносов с токенизацией защищаемых фраз
+// РАДИКАЛЬНО УЛУЧШЕННАЯ функция переносов
 function wrapText(ctx, text, maxWidth, isListItem = false) {
   if (!text) return [];
   
@@ -48,10 +48,17 @@ function wrapText(ctx, text, maxWidth, isListItem = false) {
   // ТОКЕНИЗАЦИЯ: Защищаем все фразы которые нельзя разрывать
   const protectedPhrases = [];
   
-  // Защищаем цифры с процентами и валютами
+  // Защищаем ВСЕ цифры с любыми символами (включая разорванные пробелами)
   text = text.replace(/(\d+)\s*([%₽$€£¥]+)/gi, (match, num, symbol) => {
     const token = `__TOKEN${protectedPhrases.length}__`;
     protectedPhrases.push(`${num}${symbol}`);
+    return token;
+  });
+  
+  // Защищаем разорванные цифры "9 5 %" 
+  text = text.replace(/(\d+)\s+(\d+)\s*([%₽$€£¥]+)/gi, (match, num1, num2, symbol) => {
+    const token = `__TOKEN${protectedPhrases.length}__`;
+    protectedPhrases.push(`${num1}${num2}${symbol}`);
     return token;
   });
   
@@ -59,13 +66,6 @@ function wrapText(ctx, text, maxWidth, isListItem = false) {
   text = text.replace(/(\d+)\s+(час|часа|часов|минут|минуты|секунд|секунды|дня|дней|недель|недели|месяцев|месяца|лет|года|годов|км|м|см|мм|кг|г|мг)/gi, (match, num, unit) => {
     const token = `__TOKEN${protectedPhrases.length}__`;
     protectedPhrases.push(`${num} ${unit}`);
-    return token;
-  });
-  
-  // Защищаем другие неразрывные конструкции
-  text = text.replace(/(т\.?\s*[дек]\.?|и\s+т\.?\s*[дек]\.?|№\s*\d+)/gi, (match) => {
-    const token = `__TOKEN${protectedPhrases.length}__`;
-    protectedPhrases.push(match.replace(/\s+/g, ' '));
     return token;
   });
   
@@ -96,42 +96,68 @@ function wrapText(ctx, text, maxWidth, isListItem = false) {
       });
       width = ctx.measureText(measureText).width;
     } catch (e) {
-      // Fallback если проблемы с измерением эмодзи
       width = testLine.length * 30;
     }
     
     if (width <= maxWidth) {
       currentLine = testLine;
       
-      // УЛУЧШЕННАЯ проверка висячих предлогов
-      if (nextWord) {
-        const isHangingWord = hangingWords.includes(word.toLowerCase());
-        const nextIsShort = nextWord.length <= 5;
+      // АГРЕССИВНАЯ проверка висячих предлогов
+      if (nextWord && hangingWords.includes(word.toLowerCase())) {
+        // Если текущее слово висячее - ПРИНУДИТЕЛЬНО пытаемся забрать следующие слова
+        let wordsToTake = 1;
+        let testWithMultiple = currentLine;
         
-        if (isHangingWord || (nextIsShort && hangingWords.includes(nextWord.toLowerCase()))) {
-          // Пытаемся добавить следующее слово
-          const testWithNext = `${currentLine} ${nextWord}`;
-          let widthWithNext;
+        // Пытаемся взять до 3 следующих слов, пока помещается
+        for (let j = 1; j <= Math.min(3, words.length - i - 1); j++) {
+          const nextWords = words.slice(i + 1, i + 1 + j);
+          const testMultiple = `${currentLine} ${nextWords.join(' ')}`;
+          
+          let widthMultiple;
           try {
-            let measureTextWithNext = testWithNext;
+            let measureTextMultiple = testMultiple;
             protectedPhrases.forEach((phrase, index) => {
-              measureTextWithNext = measureTextWithNext.replace(new RegExp(`__TOKEN${index}__`, 'g'), phrase);
+              measureTextMultiple = measureTextMultiple.replace(new RegExp(`__TOKEN${index}__`, 'g'), phrase);
             });
-            widthWithNext = ctx.measureText(measureTextWithNext).width;
+            widthMultiple = ctx.measureText(measureTextMultiple).width;
           } catch (e) {
-            widthWithNext = testWithNext.length * 30;
+            widthMultiple = testMultiple.length * 30;
           }
           
-          if (widthWithNext <= maxWidth && i + 1 < words.length) {
-            currentLine = testWithNext;
-            i++; // Пропускаем следующее слово
+          if (widthMultiple <= maxWidth) {
+            testWithMultiple = testMultiple;
+            wordsToTake = j;
+          } else {
+            break;
           }
+        }
+        
+        if (wordsToTake > 0) {
+          currentLine = testWithMultiple;
+          i += wordsToTake; // Пропускаем взятые слова
         }
       }
     } else {
+      // НЕ помещается - но проверяем принудительный перенос висячих слов
       if (currentLine) {
-        lines.push(currentLine);
-        currentLine = word;
+        const lastWord = currentLine.split(' ').pop();
+        
+        // Если последнее слово в строке висячее - ПРИНУДИТЕЛЬНО переносим его
+        if (lastWord && hangingWords.includes(lastWord.toLowerCase())) {
+          const wordsInLine = currentLine.split(' ');
+          const withoutLastWord = wordsInLine.slice(0, -1).join(' ');
+          
+          if (withoutLastWord) {
+            lines.push(withoutLastWord);
+            currentLine = `${lastWord} ${word}`; // Начинаем новую строку с висячего слова
+          } else {
+            lines.push(currentLine);
+            currentLine = word;
+          }
+        } else {
+          lines.push(currentLine);
+          currentLine = word;
+        }
       } else {
         // Очень длинное слово
         if (word.length > 25) {
@@ -157,8 +183,9 @@ function wrapText(ctx, text, maxWidth, isListItem = false) {
       finalLine = finalLine.replace(new RegExp(`__TOKEN${index}__`, 'g'), phrase);
     });
     
-    // Дополнительная очистка на всякий случай
+    // Агрессивная очистка пробелов
     return finalLine
+      .replace(/(\d+)\s+(\d+)\s*([%₽$€£¥]+)/gi, '$1$2$3') // "9 5 %" → "95%"
       .replace(/(\d+)\s+([%₽$€£¥]+)/gi, '$1$2')
       .replace(/\s{2,}/g, ' ')
       .trim();
