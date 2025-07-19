@@ -376,13 +376,15 @@ function renderIntroSlide(ctx, slide, contentY, contentHeight, contentWidth) {
 function renderTextSlide(ctx, slide, contentY, contentWidth) {
   let y = contentY;
   
-  // Заголовок
+  // Заголовок с исправлением пробелов
   if (slide.title) {
     const hasText = slide.text && slide.text.trim();
     ctx.font = hasText ? CONFIG.FONTS.TITLE_TEXT_WITH_CONTENT : CONFIG.FONTS.TITLE_TEXT_ONLY;
     ctx.textAlign = 'left';
     
-    const titleLines = wrapText(ctx, slide.title, contentWidth);
+    // ИСПРАВЛЯЕМ заголовок через parseWithCorrectAccents
+    const processedTitle = parseWithCorrectAccents(slide.title);
+    const titleLines = wrapText(ctx, processedTitle, contentWidth);
     titleLines.forEach(line => {
       ctx.fillText(line, CONFIG.CANVAS.PADDING, y);
       y += hasText ? 120 : 160;
@@ -412,8 +414,9 @@ function renderTextSlide(ctx, slide, contentY, contentWidth) {
         const textX = bulletX + bulletWidth;
         const availableWidth = contentWidth - bulletWidth;
         
-        // Переносим текст с учетом доступной ширины
-        const wrappedLines = wrapText(ctx, itemText, availableWidth, true);
+        // ИСПРАВЛЯЕМ текст списка через parseWithCorrectAccents
+        const processedItemText = parseWithCorrectAccents(itemText);
+        const wrappedLines = wrapText(ctx, processedItemText, availableWidth, true);
         
         wrappedLines.forEach((wrappedLine, index) => {
           ctx.fillText(wrappedLine, textX, y + (index * 72));
@@ -422,8 +425,9 @@ function renderTextSlide(ctx, slide, contentY, contentWidth) {
         y += wrappedLines.length * 72;
         
       } else if (line.trim()) {
-        // Обычный текст с улучшенными переносами
-        const wrappedLines = wrapText(ctx, line.trim(), contentWidth);
+        // Обычный текст с улучшенными переносами и исправлением цифр
+        const processedLine = parseWithCorrectAccents(line.trim());
+        const wrappedLines = wrapText(ctx, processedLine, contentWidth);
         wrappedLines.forEach(wrappedLine => {
           ctx.fillText(wrappedLine, CONFIG.CANVAS.PADDING, y);
           y += 72;
