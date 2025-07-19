@@ -26,7 +26,7 @@ COPY package*.json ./
 RUN npm ci --only=production && npm cache clean --force
 
 # Копируем нужные файлы (обновляем под Canvas)
-COPY canvas-server.js ./
+COPY . ./
 COPY .env* ./
 
 # Создаем непривилегированного пользователя (сохраняем безопасность)
