@@ -45,12 +45,21 @@ function wrapText(ctx, text, maxWidth, isListItem = false) {
   // Убираем лишние пробелы
   text = text.trim().replace(/\s+/g, ' ');
   
+  // Защищаем цифры с единицами измерения и процентами
+  text = text.replace(/(\d+)\s*([%₽$€£¥])/g, '$1$2'); // Убираем пробелы в "95 %"
+  text = text.replace(/(\d+)\s+(час|часа|часов|минут|минуты|секунд|секунды|дня|дней|недель|недели|месяцев|месяца|лет|года|годов)/gi, '$1_$2');
+  
   const words = text.split(' ');
   const lines = [];
   let currentLine = '';
 
-  // Короткие слова которые нельзя оставлять в конце строки (висячие предлоги)
-  const hangingWords = ['и', 'а', 'но', 'да', 'или', 'либо', 'то', 'не', 'ни', 'за', 'для', 'без', 'при', 'про', 'под', 'над', 'через', 'между', 'из', 'от', 'до', 'на', 'в', 'с', 'у', 'о', 'об'];
+  // Расширенный список висячих предлогов
+  const hangingWords = [
+    'и', 'а', 'но', 'да', 'или', 'либо', 'то', 'не', 'ни', 
+    'за', 'для', 'без', 'при', 'про', 'под', 'над', 'через', 'между', 
+    'из', 'от', 'до', 'на', 'в', 'с', 'у', 'о', 'об', 'во', 'со', 'ко',
+    'что', 'как', 'где', 'когда', 'если', 'чтобы', 'который', 'которая'
+  ];
   
   for (let i = 0; i < words.length; i++) {
     const word = words[i];
@@ -69,20 +78,25 @@ function wrapText(ctx, text, maxWidth, isListItem = false) {
     if (width <= maxWidth) {
       currentLine = testLine;
       
-      // Проверяем висячие предлоги/союзы
-      if (nextWord && hangingWords.includes(word.toLowerCase())) {
-        // Пытаемся добавить следующее слово, чтобы избежать висячего предлога
-        const testWithNext = `${currentLine} ${nextWord}`;
-        let widthWithNext;
-        try {
-          widthWithNext = ctx.measureText(testWithNext).width;
-        } catch (e) {
-          widthWithNext = testWithNext.length * 30;
-        }
+      // УЛУЧШЕННАЯ проверка висячих предлогов
+      if (nextWord) {
+        const isHangingWord = hangingWords.includes(word.toLowerCase());
+        const nextIsShort = nextWord.length <= 5; // Следующее слово короткое
         
-        if (widthWithNext <= maxWidth) {
-          currentLine = testWithNext;
-          i++; // Пропускаем следующее слово, так как уже добавили
+        if (isHangingWord || (nextIsShort && hangingWords.includes(nextWord.toLowerCase()))) {
+          // Пытаемся добавить следующее слово
+          const testWithNext = `${currentLine} ${nextWord}`;
+          let widthWithNext;
+          try {
+            widthWithNext = ctx.measureText(testWithNext).width;
+          } catch (e) {
+            widthWithNext = testWithNext.length * 30;
+          }
+          
+          if (widthWithNext <= maxWidth && i + 1 < words.length) {
+            currentLine = testWithNext;
+            i++; // Пропускаем следующее слово
+          }
         }
       }
     } else {
@@ -90,9 +104,9 @@ function wrapText(ctx, text, maxWidth, isListItem = false) {
         lines.push(currentLine);
         currentLine = word;
       } else {
-        // Слово слишком длинное для строки - разбиваем принудительно
-        if (word.length > 20) { // Только очень длинные слова
-          const chunks = word.match(/.{1,15}/g) || [word];
+        // Очень длинное слово
+        if (word.length > 25) {
+          const chunks = word.match(/.{1,20}/g) || [word];
           lines.push(...chunks.slice(0, -1));
           currentLine = chunks[chunks.length - 1];
         } else {
@@ -107,7 +121,10 @@ function wrapText(ctx, text, maxWidth, isListItem = false) {
     lines.push(currentLine);
   }
   
-  return lines;
+  // Восстанавливаем защищенные конструкции
+  return lines.map(line => 
+    line.replace(/(\d+)_([а-я]+)/gi, '$1 $2') // Возвращаем пробелы в единицах времени
+  );
 }
 
 function parseMarkdownToSlides(text) {
