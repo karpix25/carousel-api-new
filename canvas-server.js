@@ -12,7 +12,8 @@ const CONFIG = {
   CANVAS: {
     WIDTH: 1600,
     HEIGHT: 2000,
-    PADDING: 96,
+    PADDING: 36,
+    HEADER_FOOTER_PADDING: 48,
     BORDER_RADIUS: 64
   },
   FONTS: {
@@ -185,14 +186,14 @@ function renderSlideToCanvas(slide, slideNumber, totalSlides, settings) {
   ctx.font = CONFIG.FONTS.HEADER_FOOTER;
   ctx.globalAlpha = 0.7;
   ctx.textAlign = 'left';
-  ctx.fillText(authorUsername, CONFIG.CANVAS.PADDING, CONFIG.CANVAS.PADDING + 40);
+  ctx.fillText(authorUsername, CONFIG.CANVAS.PADDING, CONFIG.CANVAS.HEADER_FOOTER_PADDING);
   ctx.textAlign = 'right';
-  ctx.fillText(`${slideNumber}/${totalSlides}`, CONFIG.CANVAS.WIDTH - CONFIG.CANVAS.PADDING, CONFIG.CANVAS.PADDING + 40);
+  ctx.fillText(`${slideNumber}/${totalSlides}`, CONFIG.CANVAS.WIDTH - CONFIG.CANVAS.PADDING, CONFIG.CANVAS.HEADER_FOOTER_PADDING);
   ctx.globalAlpha = 1;
 
   // Content area
-  const contentY = 300;
-  const contentHeight = 1400;
+  const contentY = CONFIG.CANVAS.HEADER_FOOTER_PADDING + 60;
+  const contentHeight = CONFIG.CANVAS.HEIGHT - (CONFIG.CANVAS.HEADER_FOOTER_PADDING * 2) - 120;
   const contentWidth = CONFIG.CANVAS.WIDTH - (CONFIG.CANVAS.PADDING * 2);
   
   if (slide.type === 'intro') {
@@ -207,10 +208,10 @@ function renderSlideToCanvas(slide, slideNumber, totalSlides, settings) {
   ctx.font = CONFIG.FONTS.HEADER_FOOTER;
   ctx.globalAlpha = 0.7;
   ctx.textAlign = 'left';
-  ctx.fillText(authorFullName, CONFIG.CANVAS.PADDING, CONFIG.CANVAS.HEIGHT - CONFIG.CANVAS.PADDING);
+  ctx.fillText(authorFullName, CONFIG.CANVAS.PADDING, CONFIG.CANVAS.HEIGHT - CONFIG.CANVAS.HEADER_FOOTER_PADDING);
   ctx.textAlign = 'right';
   if (slideNumber < totalSlides) {
-    ctx.fillText('→', CONFIG.CANVAS.WIDTH - CONFIG.CANVAS.PADDING, CONFIG.CANVAS.HEIGHT - CONFIG.CANVAS.PADDING);
+    ctx.fillText('→', CONFIG.CANVAS.WIDTH - CONFIG.CANVAS.PADDING, CONFIG.CANVAS.HEIGHT - CONFIG.CANVAS.HEADER_FOOTER_PADDING);
   }
   ctx.globalAlpha = 1;
 
