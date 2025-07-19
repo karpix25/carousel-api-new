@@ -14,8 +14,11 @@ generated-images/
 
 # Development files
 test-*.js
-*-server.js
-!corrected-server.js
+enhanced-server.js
+final-server.js
+perfect-server.js
+styled-server.js
+image-server.js
 
 # Git
 .git
@@ -32,3 +35,7 @@ Thumbs.db
 # Logs
 logs/
 *.log
+
+# Environment
+.env.local
+.env.development
