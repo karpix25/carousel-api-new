@@ -1,0 +1,34 @@
+# Node modules
+node_modules
+npm-debug.log*
+
+# TypeScript files (не нужны в продакшене)
+src/
+tsconfig.json
+*.ts
+
+# Generated files
+dist/
+generated-images/
+*.png
+
+# Development files
+test-*.js
+*-server.js
+!corrected-server.js
+
+# Git
+.git
+.gitignore
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# Logs
+logs/
+*.log
