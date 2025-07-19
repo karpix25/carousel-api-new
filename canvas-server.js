@@ -12,7 +12,7 @@ const CONFIG = {
   CANVAS: {
     WIDTH: 1600,
     HEIGHT: 2000,
-    PADDING: 96,
+    PADDING: 150,
     BORDER_RADIUS: 64
   },
   FONTS: {
