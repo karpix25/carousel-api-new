@@ -15,16 +15,17 @@ const CONFIG = {
     PADDING: 96,
     BORDER_RADIUS: 64
   },
-  FONTS: {
-    TITLE_INTRO: 'bold 128px Arial',
-    SUBTITLE_INTRO: '64px Arial',
-    TITLE_TEXT_WITH_CONTENT: 'bold 96px Arial',
-    TITLE_TEXT_ONLY: 'bold 136px Arial',
-    TEXT: '56px Arial',
-    QUOTE_LARGE: 'bold 96px Arial',
-    QUOTE_SMALL: 'bold 64px Arial',
-    HEADER_FOOTER: '40px Arial'
-  },
+  // В CONFIG.FONTS замените на:
+FONTS: {
+  TITLE_INTRO: 'bold 128px "DejaVu Sans", "Liberation Sans", ui-sans-serif, system-ui, sans-serif',
+  SUBTITLE_INTRO: '64px "DejaVu Sans", "Liberation Sans", ui-sans-serif, system-ui, sans-serif',
+  TITLE_TEXT_WITH_CONTENT: 'bold 96px "DejaVu Sans", "Liberation Sans", ui-sans-serif, system-ui, sans-serif',
+  TITLE_TEXT_ONLY: 'bold 136px "DejaVu Sans", "Liberation Sans", ui-sans-serif, system-ui, sans-serif',
+  TEXT: '56px "DejaVu Sans", "Liberation Sans", ui-sans-serif, system-ui, sans-serif',
+  QUOTE_LARGE: 'bold 96px "DejaVu Sans", "Liberation Sans", ui-sans-serif, system-ui, sans-serif',
+  QUOTE_SMALL: 'bold 64px "DejaVu Sans", "Liberation Sans", ui-sans-serif, system-ui, sans-serif',
+  HEADER_FOOTER: '40px "DejaVu Sans", "Liberation Sans", ui-sans-serif, system-ui, sans-serif'
+},
   COLORS: {
     DEFAULT_BG: '#ffffff',
     DEFAULT_TEXT: '#000000',
