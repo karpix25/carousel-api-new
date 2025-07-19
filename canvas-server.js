@@ -32,40 +32,33 @@ const CONFIG = {
   }
 };
 
-// Функция для очистки HTML тегов и исправления цифр (для Canvas)
-function cleanTextForCanvas(text) {
+// ЭКСТРЕМАЛЬНАЯ функция очистки - убирает ВСЕ пробелы вокруг цифр
+function extremeCleanText(text) {
   if (!text) return '';
   
-  // ДИАГНОСТИКА: выводим что у нас есть
-  console.log('🔍 Исходный текст:', JSON.stringify(text));
-  console.log('🔍 Коды символов:', [...text].map(char => `${char}(${char.charCodeAt(0)})`).join(' '));
+  console.log('🔥 ЭКСТРЕМАЛЬНАЯ очистка:', JSON.stringify(text));
   
-  // Агрессивная очистка ВСЕХ видов пробелов между цифрами
-  let cleaned = text
-    // Обычные пробелы
-    .replace(/(\d+)\s+(\d+)\s*([%₽$€£¥])/gi, '$1$2$3')
-    .replace(/(\d+)\s+([%₽$€£¥])/gi, '$1$2')
-    // Неразрывные пробелы (nbsp)
-    .replace(/(\d+)[\u00A0]+(\d+)[\u00A0]*([%₽$€£¥])/gi, '$1$2$3')
-    .replace(/(\d+)[\u00A0]+([%₽$€£¥])/gi, '$1$2')
-    // Все Unicode пробелы
-    .replace(/(\d+)[\u0020\u00A0\u1680\u2000-\u200A\u202F\u205F\u3000]+(\d+)[\u0020\u00A0\u1680\u2000-\u200A\u202F\u205F\u3000]*([%₽$€£¥])/gi, '$1$2$3')
-    .replace(/(\d+)[\u0020\u00A0\u1680\u2000-\u200A\u202F\u205F\u3000]+([%₽$€£¥])/gi, '$1$2');
+  let cleaned = text;
   
-  // Убираем все HTML теги
+  // 1. УБИРАЕМ ВСЕ пробелы перед цифрами
+  cleaned = cleaned.replace(/\s+(\d)/g, ' $1'); // Только ОДИН пробел перед цифрой
+  
+  // 2. УБИРАЕМ ВСЕ пробелы после цифр (кроме единиц времени)
+  cleaned = cleaned.replace(/(\d)\s+(?!(час|минут|секунд|дня|года|км|м|см|г|кг))/g, '$1');
+  
+  // 3. АГРЕССИВНО убираем пробелы между цифрами и символами
+  cleaned = cleaned.replace(/(\d)\s*(\d)/g, '$1$2'); // Цифра-пробел-цифра → цифра-цифра
+  cleaned = cleaned.replace(/(\d)\s*([%₽$€£¥])/g, '$1$2'); // Цифра-пробел-символ → цифра-символ
+  
+  // 4. Финальная зачистка HTML и entities
   cleaned = cleaned.replace(/<[^>]*>/g, '');
+  cleaned = cleaned.replace(/&\w+;/g, '');
+  cleaned = cleaned.replace(/[\u00A0\u1680\u2000-\u200A\u202F\u205F\u3000]/g, ''); // Все виды пробелов
   
-  // Убираем HTML entities
-  cleaned = cleaned
-    .replace(/&nbsp;/gi, '')
-    .replace(/&#160;/gi, '')
-    .replace(/&\w+;/gi, '');
+  // 5. Нормализуем обычные пробелы
+  cleaned = cleaned.replace(/\s{2,}/g, ' ').trim();
   
-  // Финальная очистка пробелов
-  cleaned = cleaned.replace(/\s+/g, ' ').trim();
-  
-  console.log('✅ Очищенный текст:', JSON.stringify(cleaned));
-  console.log('✅ Коды после очистки:', [...cleaned].map(char => `${char}(${char.charCodeAt(0)})`).join(' '));
+  console.log('✅ ЭКСТРЕМАЛЬНО очищен:', JSON.stringify(cleaned));
   
   return cleaned;
 }
@@ -406,14 +399,14 @@ function renderIntroSlide(ctx, slide, contentY, contentHeight, contentWidth) {
 function renderTextSlide(ctx, slide, contentY, contentWidth) {
   let y = contentY;
   
-  // Заголовок с исправлением пробелов (БЕЗ HTML тегов)
+  // Заголовок с ЭКСТРЕМАЛЬНОЙ очисткой
   if (slide.title) {
     const hasText = slide.text && slide.text.trim();
     ctx.font = hasText ? CONFIG.FONTS.TITLE_TEXT_WITH_CONTENT : CONFIG.FONTS.TITLE_TEXT_ONLY;
     ctx.textAlign = 'left';
     
-    // ИСПРАВЛЯЕМ заголовок через cleanTextForCanvas (чистый текст)
-    const cleanTitle = cleanTextForCanvas(slide.title);
+    // ЭКСТРЕМАЛЬНАЯ очистка заголовка
+    const cleanTitle = extremeCleanText(slide.title);
     const titleLines = wrapText(ctx, cleanTitle, contentWidth);
     titleLines.forEach(line => {
       ctx.fillText(line, CONFIG.CANVAS.PADDING, y);
@@ -423,7 +416,7 @@ function renderTextSlide(ctx, slide, contentY, contentWidth) {
     if (hasText) y += 64;
   }
 
-  // Текст с улучшенной обработкой списков
+  // Текст с ЭКСТРЕМАЛЬНОЙ очисткой
   if (slide.text) {
     ctx.font = CONFIG.FONTS.TEXT;
     ctx.textAlign = 'left';
@@ -444,8 +437,8 @@ function renderTextSlide(ctx, slide, contentY, contentWidth) {
         const textX = bulletX + bulletWidth;
         const availableWidth = contentWidth - bulletWidth;
         
-        // ИСПРАВЛЯЕМ текст списка через cleanTextForCanvas
-        const cleanItemText = cleanTextForCanvas(itemText);
+        // ЭКСТРЕМАЛЬНАЯ очистка текста списка
+        const cleanItemText = extremeCleanText(itemText);
         const wrappedLines = wrapText(ctx, cleanItemText, availableWidth, true);
         
         wrappedLines.forEach((wrappedLine, index) => {
@@ -455,8 +448,8 @@ function renderTextSlide(ctx, slide, contentY, contentWidth) {
         y += wrappedLines.length * 72;
         
       } else if (line.trim()) {
-        // Обычный текст с улучшенными переносами и исправлением цифр
-        const cleanLine = cleanTextForCanvas(line.trim());
+        // Обычный текст с ЭКСТРЕМАЛЬНОЙ очисткой
+        const cleanLine = extremeCleanText(line.trim());
         const wrappedLines = wrapText(ctx, cleanLine, contentWidth);
         wrappedLines.forEach(wrappedLine => {
           ctx.fillText(wrappedLine, CONFIG.CANVAS.PADDING, y);
