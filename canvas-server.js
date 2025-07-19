@@ -32,13 +32,21 @@ const CONFIG = {
   }
 };
 
-// Утилиты
+// ТОЧНО ваша функция + ТОЛЬКО висячие предлоги
 function wrapText(ctx, text, maxWidth) {
   if (!text) return [];
   
   const words = text.split(' ');
   const lines = [];
   let currentLine = words[0] || '';
+
+  // Висячие предлоги
+  const hangingWords = [
+    'и', 'а', 'но', 'да', 'или', 'либо', 'то', 'не', 'ни', 
+    'за', 'для', 'без', 'при', 'про', 'под', 'над', 'через', 'между', 
+    'из', 'от', 'до', 'на', 'в', 'с', 'у', 'о', 'об', 'во', 'со', 'ко',
+    'что', 'как', 'где', 'когда', 'если', 'чтобы', 'который', 'которая'
+  ];
 
   for (let i = 1; i < words.length; i++) {
     const word = words[i];
@@ -47,6 +55,18 @@ function wrapText(ctx, text, maxWidth) {
     
     if (width < maxWidth) {
       currentLine = testLine;
+      
+      // ДОБАВЛЯЕМ ТОЛЬКО проверку висячих предлогов
+      const nextWord = words[i + 1];
+      if (nextWord && hangingWords.includes(word.toLowerCase())) {
+        const testWithNext = currentLine + ' ' + nextWord;
+        const widthWithNext = ctx.measureText(testWithNext).width;
+        
+        if (widthWithNext < maxWidth) {
+          currentLine = testWithNext;
+          i++; // Пропускаем следующее слово
+        }
+      }
     } else {
       lines.push(currentLine);
       currentLine = word;
@@ -237,7 +257,7 @@ function renderTextSlide(ctx, slide, contentY, contentWidth) {
     if (hasText) y += 64;
   }
 
-  // Текст
+  // Текст - ТОЧНО как в оригинале
   if (slide.text) {
     ctx.font = CONFIG.FONTS.TEXT;
     ctx.textAlign = 'left';
