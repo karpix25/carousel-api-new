@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Carousel Slide</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <style>
+        * {
+            box-sizing: border-box;
+            -webkit-font-smoothing: antialiased;
+            margin: 0;
+            padding: 0;
+        }
+
+        html, body {
+            width: 1080px;
+            height: 1080px;
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+        }
+
+        .slide-wrapper {
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            gap: 36px;
+            padding: 48px 36px;
+            font-family: 'Inter', sans-serif;
+            overflow: hidden;
+            height: 1080px;
+            width: 1080px;
+            position: relative;
+            background: var(--backgroundColor, #ffffff);
+            color: var(--textColor, #000000);
+        }
+
+        .slide-content {
+            position: relative;
+            flex-grow: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            z-index: 10;
+        }
+
+        .slide-header {
+            font-size: 12px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            height: 20px;
+            max-height: 20px;
+            z-index: 10;
+        }
+
+        .slide-footer {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 12px;
+            height: 20px;
+            max-height: 20px;
+            z-index: 10;
+        }
+
+        .slide-footer .slide-arrow {
+            width: 20px;
+            height: 20px;
+        }
+
+        .slide-footer .slide-arrow svg {
+            width: 100%;
+            height: 100%;
+            fill: var(--textColor, #000000);
+        }
+
+        .slide-username:after {
+            content: var(--authorUsername, "@username");
+        }
+
+        .slide-fullname:after {
+            content: var(--authorFullName, "Full Name");
+        }
+
+        /* Typography */
+        .slide-wrapper h1 {
+            font-size: 48px;
+            font-weight: 600;
+            line-height: 1.1;
+            margin-bottom: 24px;
+        }
+
+        .slide-wrapper h2 {
+            font-size: 32px;
+            font-weight: 600;
+            line-height: 1.2;
+            margin-bottom: 20px;
+        }
+
+        .slide-wrapper p {
+            font-size: 18px;
+            line-height: 1.4;
+            margin-bottom: 16px;
+        }
+
+        .slide-wrapper p:last-child {
+            margin-bottom: 0;
+        }
+
+        .slide-wrapper ul,
+        .slide-wrapper ol {
+            font-size: 18px;
+            padding-left: 20px;
+            margin: 16px 0;
+        }
+
+        .slide-wrapper ul li,
+        .slide-wrapper ol li {
+            margin-bottom: 12px;
+            line-height: 1.4;
+        }
+
+        .slide-wrapper ul li:last-child,
+        .slide-wrapper ol li:last-child {
+            margin-bottom: 0;
+        }
+
+        /* Slide type specific styles */
+        .slide-content.intro h1 {
+            font-size: 56px;
+            font-weight: 600;
+            text-align: center;
+            margin-bottom: 24px;
+        }
+
+        .slide-content.intro p {
+            font-size: 24px;
+            text-align: center;
+            opacity: 0.8;
+        }
+
+        .slide-content.text {
+            text-align: left;
+        }
+
+        .slide-content.quote {
+            text-align: center;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .slide-content.quote .quote-content {
+            max-width: 800px;
+        }
+
+        .quote--large {
+            font-size: 42px;
+            line-height: 1.2;
+            font-weight: 500;
+        }
+
+        .quote--medium {
+            font-size: 32px;
+            line-height: 1.3;
+            font-weight: 500;
+        }
+
+        .quote--small {
+            font-size: 24px;
+            line-height: 1.4;
+            font-weight: 400;
+        }
+
+        /* Color schemes */
+        .slide-wrapper.color--default {
+            background: var(--backgroundColor, #ffffff);
+            color: var(--textColor, #000000);
+        }
+
+        .slide-wrapper.color--accent {
+            background: var(--accentColor, var(--brandColor, #2F00FF));
+            color: var(--textOnAccent, #ffffff);
+        }
+
+        .slide-wrapper.color--accent .slide-footer .slide-arrow svg {
+            fill: var(--textOnAccent, #ffffff);
+        }
+
+        /* Abstract shapes */
+        .slide-shape {
+            position: absolute;
+            opacity: 0.1;
+            z-index: 1;
+            pointer-events: none;
+        }
+
+        .slide-shape svg {
+            width: 100%;
+            height: 100%;
+        }
+
+        .slide-shape svg path {
+            fill: var(--textColor, #000000);
+        }
+
+        .slide-wrapper.color--accent .slide-shape svg path {
+            fill: var(--textOnAccent, #ffffff);
+        }
+
+        .slide-shape--one {
+            top: -240px;
+            right: -240px;
+            width: 480px;
+            height: 480px;
+        }
+
+        .slide-shape--two {
+            bottom: -240px;
+            left: -240px;
+            width: 480px;
+            height: 480px;
+            opacity: 0.05;
+        }
+
+        /* Style-specific adjustments */
+        .style--bright .slide-shape {
+            opacity: 0.15;
+        }
+
+        .style--bright .slide-shape--two {
+            opacity: 0.08;
+        }
+
+        .style--elegant .slide-shape {
+            opacity: 0.08;
+        }
+
+        .style--elegant .slide-wrapper {
+            background: var(--backgroundColor, #1a1a1a);
+            color: var(--textColor, #ffffff);
+        }
+
+        /* Responsive adjustments for consistency */
+        @media screen and (max-width: 1080px) {
+            html, body, .slide-wrapper {
+                width: 1080px;
+                height: 1080px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="slide-wrapper {{colorClass}} {{styleClass}}" style="{{cssVariables}}">
+        {{#if showShapeOne}}
+        <div class="slide-shape slide-shape--one">{{shapeOne}}</div>
+        {{/if}}
+        
+        {{#if showShapeTwo}}
+        <div class="slide-shape slide-shape--two">{{shapeTwo}}</div>
+        {{/if}}
+
+        <div class="slide-header">
+            <div class="slide-author slide-username"></div>
+            <div class="slide-page">{{slideNumber}}/{{totalSlides}}</div>
+        </div>
+
+        <div class="slide-content {{slideType}}">
+            {{content}}
+        </div>
+
+        <div class="slide-footer">
+            <div class="slide-author slide-fullname"></div>
+            {{#if showArrow}}
+            <div class="slide-arrow">
+                <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 256 256">
+                    <path d="M221.66,133.66l-72,72a8,8,0,0,1-11.32-11.32L196.69,136H40a8,8,0,0,1,0-16H196.69L138.34,61.66a8,8,0,0,1,11.32-11.32l72,72A8,8,0,0,1,221.66,133.66Z"/>
+                </svg>
+            </div>
+            {{/if}}
+        </div>
+    </div>
+</body>
+</html>
