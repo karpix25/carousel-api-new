@@ -32,27 +32,22 @@ const CONFIG = {
   }
 };
 
-// Исправленная функция обработки акцентов
-function parseWithCorrectAccents(text) {
-  let html = marked(text);
+// Функция для очистки HTML тегов и исправления цифр (для Canvas)
+function cleanTextForCanvas(text) {
+  if (!text) return '';
   
-  // Убираем лишние <p> теги из marked для лучшего контроля
-  html = html.replace(/<\/?p>/g, '');
+  // Сначала исправляем разорванные цифры
+  let cleaned = text
+    .replace(/(\d+)\s+(\d+)\s*([%₽$€£¥])/gi, '$1$2$3') // "9 5 %" → "95%"
+    .replace(/(\d+)\s+([%₽$€£¥])/gi, '$1$2');           // "95 %" → "95%"
   
-  // ИСПРАВЛЕНИЕ: Склеиваем разорванные цифры ПЕРЕД акцентами
-  html = html.replace(/(\d+)\s+(\d+)\s*([%₽$€£¥])/gi, '$1$2$3');
-  html = html.replace(/(\d+)\s+([%₽$€£¥])/gi, '$1$2');
+  // Убираем все HTML теги
+  cleaned = cleaned.replace(/<[^>]*>/g, '');
   
-  // Цветовые акценты для чисел и времени
-  html = html.replace(/(\d+[%₽$€£¥]|\d+\/\d+|\d+\s*(час|часа|минут|секунд|дня?|недел|месяц|год))/gi, '<span class="accent-blue">$1</span>');
+  // Убираем лишние пробелы
+  cleaned = cleaned.replace(/\s+/g, ' ').trim();
   
-  // Специальные ключевые слова с подчеркиванием
-  html = html.replace(/(практики|стратегии|качества)/gi, '<span class="accent-blue underline-double">$1</span>');
-  
-  // Обычные ключевые слова без подчеркивания
-  html = html.replace(/(автоматизация|автоматизацию|необходимость)/gi, '<span class="accent-blue">$1</span>');
-  
-  return html;
+  return cleaned;
 }
 
 // РАДИКАЛЬНО УЛУЧШЕННАЯ функция переносов
@@ -376,15 +371,15 @@ function renderIntroSlide(ctx, slide, contentY, contentHeight, contentWidth) {
 function renderTextSlide(ctx, slide, contentY, contentWidth) {
   let y = contentY;
   
-  // Заголовок с исправлением пробелов
+  // Заголовок с исправлением пробелов (БЕЗ HTML тегов)
   if (slide.title) {
     const hasText = slide.text && slide.text.trim();
     ctx.font = hasText ? CONFIG.FONTS.TITLE_TEXT_WITH_CONTENT : CONFIG.FONTS.TITLE_TEXT_ONLY;
     ctx.textAlign = 'left';
     
-    // ИСПРАВЛЯЕМ заголовок через parseWithCorrectAccents
-    const processedTitle = parseWithCorrectAccents(slide.title);
-    const titleLines = wrapText(ctx, processedTitle, contentWidth);
+    // ИСПРАВЛЯЕМ заголовок через cleanTextForCanvas (чистый текст)
+    const cleanTitle = cleanTextForCanvas(slide.title);
+    const titleLines = wrapText(ctx, cleanTitle, contentWidth);
     titleLines.forEach(line => {
       ctx.fillText(line, CONFIG.CANVAS.PADDING, y);
       y += hasText ? 120 : 160;
@@ -414,9 +409,9 @@ function renderTextSlide(ctx, slide, contentY, contentWidth) {
         const textX = bulletX + bulletWidth;
         const availableWidth = contentWidth - bulletWidth;
         
-        // ИСПРАВЛЯЕМ текст списка через parseWithCorrectAccents
-        const processedItemText = parseWithCorrectAccents(itemText);
-        const wrappedLines = wrapText(ctx, processedItemText, availableWidth, true);
+        // ИСПРАВЛЯЕМ текст списка через cleanTextForCanvas
+        const cleanItemText = cleanTextForCanvas(itemText);
+        const wrappedLines = wrapText(ctx, cleanItemText, availableWidth, true);
         
         wrappedLines.forEach((wrappedLine, index) => {
           ctx.fillText(wrappedLine, textX, y + (index * 72));
@@ -426,8 +421,8 @@ function renderTextSlide(ctx, slide, contentY, contentWidth) {
         
       } else if (line.trim()) {
         // Обычный текст с улучшенными переносами и исправлением цифр
-        const processedLine = parseWithCorrectAccents(line.trim());
-        const wrappedLines = wrapText(ctx, processedLine, contentWidth);
+        const cleanLine = cleanTextForCanvas(line.trim());
+        const wrappedLines = wrapText(ctx, cleanLine, contentWidth);
         wrappedLines.forEach(wrappedLine => {
           ctx.fillText(wrappedLine, CONFIG.CANVAS.PADDING, y);
           y += 72;
