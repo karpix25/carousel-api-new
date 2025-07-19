@@ -1,7 +1,7 @@
-# Use Node.js 18 Alpine for smaller image size
+# Используем Node.js 18 Alpine
 FROM node:18-alpine
 
-# Install Puppeteer dependencies
+# Устанавливаем зависимости для Puppeteer
 RUN apk add --no-cache \
     chromium \
     nss \
@@ -12,39 +12,41 @@ RUN apk add --no-cache \
     ttf-freefont \
     ttf-dejavu \
     ttf-droid \
-    ttf-liberation
+    ttf-liberation \
+    && rm -rf /var/cache/apk/*
 
-# Tell Puppeteer to skip installing Chromium
+# Переменные окружения для Puppeteer
 ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
     PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser \
     NODE_ENV=production
 
-# Create app directory
+# Создаем рабочую директорию
 WORKDIR /app
 
-# Copy package files
+# Копируем package.json
 COPY package*.json ./
 
-# Install dependencies
-RUN npm ci --only=production
+# Устанавливаем зависимости
+RUN npm ci --only=production && npm cache clean --force
 
-# Copy source code
-COPY . .
+# Копируем только нужные файлы
+COPY corrected-server.js ./
+COPY .env* ./
 
-# Build TypeScript
-RUN npm run build
+# Создаем непривилегированного пользователя
+RUN addgroup -g 1001 -S nodejs && \
+    adduser -S carousel -u 1001 -G nodejs
 
-# Create non-root user for security
-RUN addgroup -g 1001 -S nodejs
-RUN adduser -S carousel -u 1001
+# Меняем владельца файлов
+RUN chown -R carousel:nodejs /app
 USER carousel
 
-# Expose port
-EXPOSE 3000
+# Открываем порт
+EXPOSE 3001
 
 # Health check
-HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-  CMD node -e "require('http').get('http://localhost:3000/health', (res) => { process.exit(res.statusCode === 200 ? 0 : 1) })"
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+  CMD node -e "require('http').get('http://localhost:3001/health', (res) => { process.exit(res.statusCode === 200 ? 0 : 1) })"
 
-# Start the application
-CMD ["npm", "start"]
+# Запускаем приложение
+CMD ["node", "corrected-server.js"]
