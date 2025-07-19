@@ -38,16 +38,36 @@ function isEmoji(char) {
   return emojiRegex.test(char);
 }
 
-// Улучшенная функция переносов с поддержкой эмодзи и висячих предлогов
+// Улучшенная функция переносов с токенизацией защищаемых фраз
 function wrapText(ctx, text, maxWidth, isListItem = false) {
   if (!text) return [];
   
   // Убираем лишние пробелы
   text = text.trim().replace(/\s+/g, ' ');
   
-  // Защищаем цифры с единицами измерения и процентами
-  text = text.replace(/(\d+)\s*([%₽$€£¥])/g, '$1$2'); // Убираем пробелы в "95 %"
-  text = text.replace(/(\d+)\s+(час|часа|часов|минут|минуты|секунд|секунды|дня|дней|недель|недели|месяцев|месяца|лет|года|годов)/gi, '$1_$2');
+  // ТОКЕНИЗАЦИЯ: Защищаем все фразы которые нельзя разрывать
+  const protectedPhrases = [];
+  
+  // Защищаем цифры с процентами и валютами
+  text = text.replace(/(\d+)\s*([%₽$€£¥]+)/gi, (match, num, symbol) => {
+    const token = `__TOKEN${protectedPhrases.length}__`;
+    protectedPhrases.push(`${num}${symbol}`);
+    return token;
+  });
+  
+  // Защищаем цифры с единицами времени/измерения
+  text = text.replace(/(\d+)\s+(час|часа|часов|минут|минуты|секунд|секунды|дня|дней|недель|недели|месяцев|месяца|лет|года|годов|км|м|см|мм|кг|г|мг)/gi, (match, num, unit) => {
+    const token = `__TOKEN${protectedPhrases.length}__`;
+    protectedPhrases.push(`${num} ${unit}`);
+    return token;
+  });
+  
+  // Защищаем другие неразрывные конструкции
+  text = text.replace(/(т\.?\s*[дек]\.?|и\s+т\.?\s*[дек]\.?|№\s*\d+)/gi, (match) => {
+    const token = `__TOKEN${protectedPhrases.length}__`;
+    protectedPhrases.push(match.replace(/\s+/g, ' '));
+    return token;
+  });
   
   const words = text.split(' ');
   const lines = [];
@@ -69,10 +89,15 @@ function wrapText(ctx, text, maxWidth, isListItem = false) {
     // Проверяем ширину с учетом эмодзи
     let width;
     try {
-      width = ctx.measureText(testLine).width;
+      // Временно восстанавливаем токены для точного измерения
+      let measureText = testLine;
+      protectedPhrases.forEach((phrase, index) => {
+        measureText = measureText.replace(new RegExp(`__TOKEN${index}__`, 'g'), phrase);
+      });
+      width = ctx.measureText(measureText).width;
     } catch (e) {
       // Fallback если проблемы с измерением эмодзи
-      width = testLine.length * 30; // Примерная ширина
+      width = testLine.length * 30;
     }
     
     if (width <= maxWidth) {
@@ -81,14 +106,18 @@ function wrapText(ctx, text, maxWidth, isListItem = false) {
       // УЛУЧШЕННАЯ проверка висячих предлогов
       if (nextWord) {
         const isHangingWord = hangingWords.includes(word.toLowerCase());
-        const nextIsShort = nextWord.length <= 5; // Следующее слово короткое
+        const nextIsShort = nextWord.length <= 5;
         
         if (isHangingWord || (nextIsShort && hangingWords.includes(nextWord.toLowerCase()))) {
           // Пытаемся добавить следующее слово
           const testWithNext = `${currentLine} ${nextWord}`;
           let widthWithNext;
           try {
-            widthWithNext = ctx.measureText(testWithNext).width;
+            let measureTextWithNext = testWithNext;
+            protectedPhrases.forEach((phrase, index) => {
+              measureTextWithNext = measureTextWithNext.replace(new RegExp(`__TOKEN${index}__`, 'g'), phrase);
+            });
+            widthWithNext = ctx.measureText(measureTextWithNext).width;
           } catch (e) {
             widthWithNext = testWithNext.length * 30;
           }
@@ -121,10 +150,19 @@ function wrapText(ctx, text, maxWidth, isListItem = false) {
     lines.push(currentLine);
   }
   
-  // Восстанавливаем защищенные конструкции
-  return lines.map(line => 
-    line.replace(/(\d+)_([а-я]+)/gi, '$1 $2') // Возвращаем пробелы в единицах времени
-  );
+  // ВОССТАНАВЛИВАЕМ ТОКЕНЫ в финальных строках
+  return lines.map(line => {
+    let finalLine = line;
+    protectedPhrases.forEach((phrase, index) => {
+      finalLine = finalLine.replace(new RegExp(`__TOKEN${index}__`, 'g'), phrase);
+    });
+    
+    // Дополнительная очистка на всякий случай
+    return finalLine
+      .replace(/(\d+)\s+([%₽$€£¥]+)/gi, '$1$2')
+      .replace(/\s{2,}/g, ' ')
+      .trim();
+  });
 }
 
 function parseMarkdownToSlides(text) {
