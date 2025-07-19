@@ -32,38 +32,13 @@ const CONFIG = {
   }
 };
 
-// ЭКСТРЕМАЛЬНАЯ функция очистки - убирает ВСЕ пробелы вокруг цифр
-function extremeCleanText(text) {
-  if (!text) return '';
-  
-  console.log('🔥 ЭКСТРЕМАЛЬНАЯ очистка:', JSON.stringify(text));
-  
-  let cleaned = text;
-  
-  // 1. УБИРАЕМ ВСЕ пробелы перед цифрами
-  cleaned = cleaned.replace(/\s+(\d)/g, ' $1'); // Только ОДИН пробел перед цифрой
-  
-  // 2. УБИРАЕМ ВСЕ пробелы после цифр (кроме единиц времени)
-  cleaned = cleaned.replace(/(\d)\s+(?!(час|минут|секунд|дня|года|км|м|см|г|кг))/g, '$1');
-  
-  // 3. АГРЕССИВНО убираем пробелы между цифрами и символами
-  cleaned = cleaned.replace(/(\d)\s*(\d)/g, '$1$2'); // Цифра-пробел-цифра → цифра-цифра
-  cleaned = cleaned.replace(/(\d)\s*([%₽$€£¥])/g, '$1$2'); // Цифра-пробел-символ → цифра-символ
-  
-  // 4. Финальная зачистка HTML и entities
-  cleaned = cleaned.replace(/<[^>]*>/g, '');
-  cleaned = cleaned.replace(/&\w+;/g, '');
-  cleaned = cleaned.replace(/[\u00A0\u1680\u2000-\u200A\u202F\u205F\u3000]/g, ''); // Все виды пробелов
-  
-  // 5. Нормализуем обычные пробелы
-  cleaned = cleaned.replace(/\s{2,}/g, ' ').trim();
-  
-  console.log('✅ ЭКСТРЕМАЛЬНО очищен:', JSON.stringify(cleaned));
-  
-  return cleaned;
+// Утилита для проверки эмодзи
+function isEmoji(char) {
+  const emojiRegex = /[\u{1F600}-\u{1F64F}]|[\u{1F300}-\u{1F5FF}]|[\u{1F680}-\u{1F6FF}]|[\u{1F1E0}-\u{1F1FF}]|[\u{2600}-\u{26FF}]|[\u{2700}-\u{27BF}]/u;
+  return emojiRegex.test(char);
 }
 
-// РАДИКАЛЬНО УЛУЧШЕННАЯ функция переносов
+// УЛУЧШЕННАЯ функция переносов с поддержкой эмодзи и висячих предлогов
 function wrapText(ctx, text, maxWidth, isListItem = false) {
   if (!text) return [];
   
@@ -127,9 +102,9 @@ function wrapText(ctx, text, maxWidth, isListItem = false) {
     if (width <= maxWidth) {
       currentLine = testLine;
       
-      // АГРЕССИВНАЯ проверка висячих предлогов
+      // Проверка висячих предлогов
       if (nextWord && hangingWords.includes(word.toLowerCase())) {
-        // Если текущее слово висячее - ПРИНУДИТЕЛЬНО пытаемся забрать следующие слова
+        // Если текущее слово висячее - пытаемся забрать следующие слова
         let wordsToTake = 1;
         let testWithMultiple = currentLine;
         
@@ -167,7 +142,7 @@ function wrapText(ctx, text, maxWidth, isListItem = false) {
       if (currentLine) {
         const lastWord = currentLine.split(' ').pop();
         
-        // Если последнее слово в строке висячее - ПРИНУДИТЕЛЬНО переносим его
+        // Если последнее слово в строке висячее - переносим его
         if (lastWord && hangingWords.includes(lastWord.toLowerCase())) {
           const wordsInLine = currentLine.split(' ');
           const withoutLastWord = wordsInLine.slice(0, -1).join(' ');
@@ -208,7 +183,6 @@ function wrapText(ctx, text, maxWidth, isListItem = false) {
       finalLine = finalLine.replace(new RegExp(`__TOKEN${index}__`, 'g'), phrase);
     });
     
-    // УБИРАЕМ агрессивную очистку которая ЛОМАЕТ цифры
     return finalLine
       .replace(/\s{2,}/g, ' ')
       .trim();
@@ -216,7 +190,7 @@ function wrapText(ctx, text, maxWidth, isListItem = false) {
 }
 
 function parseMarkdownToSlides(text) {
-  // ИСПРАВЛЯЕМ разорванные цифры СРАЗУ в исходном тексте
+  // Исправляем разорванные цифры СРАЗУ в исходном тексте
   text = text
     .replace(/(\d+)\s+(\d+)\s*([%₽$€£¥])/gi, '$1$2$3') // "9 5 %" → "95%"
     .replace(/(\d+)\s+([%₽$€£¥])/gi, '$1$2');           // "95 %" → "95%"
@@ -289,7 +263,7 @@ function parseMarkdownToSlides(text) {
       delete slide.content;
     }
     
-    // ДОПОЛНИТЕЛЬНАЯ очистка для каждого слайда
+    // Дополнительная очистка для каждого слайда
     if (slide.title) {
       slide.title = slide.title
         .replace(/(\d+)\s+(\d+)\s*([%₽$€£¥])/gi, '$1$2$3')
@@ -399,15 +373,13 @@ function renderIntroSlide(ctx, slide, contentY, contentHeight, contentWidth) {
 function renderTextSlide(ctx, slide, contentY, contentWidth) {
   let y = contentY;
   
-  // Заголовок с ЭКСТРЕМАЛЬНОЙ очисткой
+  // Заголовок (БЕЗ extremeCleanText)
   if (slide.title) {
     const hasText = slide.text && slide.text.trim();
     ctx.font = hasText ? CONFIG.FONTS.TITLE_TEXT_WITH_CONTENT : CONFIG.FONTS.TITLE_TEXT_ONLY;
     ctx.textAlign = 'left';
     
-    // ЭКСТРЕМАЛЬНАЯ очистка заголовка
-    const cleanTitle = extremeCleanText(slide.title);
-    const titleLines = wrapText(ctx, cleanTitle, contentWidth);
+    const titleLines = wrapText(ctx, slide.title, contentWidth);
     titleLines.forEach(line => {
       ctx.fillText(line, CONFIG.CANVAS.PADDING, y);
       y += hasText ? 120 : 160;
@@ -416,7 +388,7 @@ function renderTextSlide(ctx, slide, contentY, contentWidth) {
     if (hasText) y += 64;
   }
 
-  // Текст с ЭКСТРЕМАЛЬНОЙ очисткой
+  // Текст (БЕЗ extremeCleanText)
   if (slide.text) {
     ctx.font = CONFIG.FONTS.TEXT;
     ctx.textAlign = 'left';
@@ -425,21 +397,19 @@ function renderTextSlide(ctx, slide, contentY, contentWidth) {
     
     textLines.forEach(line => {
       if (line.trim().startsWith('•')) {
-        // ИСПРАВЛЕННАЯ логика для списков
+        // Логика для списков
         const itemText = line.replace(/^•\s*/, '');
         
         // Рендерим буллет
         const bulletX = CONFIG.CANVAS.PADDING;
         ctx.fillText('•', bulletX, y);
         
-        // Вычисляем отступ для текста (выравниваем под текстом, НЕ под буллетом)
+        // Вычисляем отступ для текста
         const bulletWidth = ctx.measureText('• ').width;
         const textX = bulletX + bulletWidth;
         const availableWidth = contentWidth - bulletWidth;
         
-        // ЭКСТРЕМАЛЬНАЯ очистка текста списка
-        const cleanItemText = extremeCleanText(itemText);
-        const wrappedLines = wrapText(ctx, cleanItemText, availableWidth, true);
+        const wrappedLines = wrapText(ctx, itemText, availableWidth, true);
         
         wrappedLines.forEach((wrappedLine, index) => {
           ctx.fillText(wrappedLine, textX, y + (index * 72));
@@ -448,9 +418,8 @@ function renderTextSlide(ctx, slide, contentY, contentWidth) {
         y += wrappedLines.length * 72;
         
       } else if (line.trim()) {
-        // Обычный текст с ЭКСТРЕМАЛЬНОЙ очисткой
-        const cleanLine = extremeCleanText(line.trim());
-        const wrappedLines = wrapText(ctx, cleanLine, contentWidth);
+        // Обычный текст
+        const wrappedLines = wrapText(ctx, line.trim(), contentWidth);
         wrappedLines.forEach(wrappedLine => {
           ctx.fillText(wrappedLine, CONFIG.CANVAS.PADDING, y);
           y += 72;
