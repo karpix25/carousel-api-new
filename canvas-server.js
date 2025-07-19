@@ -1,8 +1,8 @@
-console.log('🎯 ФИНАЛЬНАЯ ПРОДАКШН ВЕРСИЯ - Canvas API с эмодзи');
+console.log('🎯 ФИНАЛЬНАЯ ПРОДАКШН ВЕРСИЯ - Canvas API');
 
 const express = require('express');
 const { marked } = require('marked');
-const { createCanvas, registerFont } = require('canvas');
+const { createCanvas } = require('canvas');
 
 const app = express();
 app.use(express.json({ limit: '10mb' }));
@@ -32,48 +32,18 @@ const CONFIG = {
   }
 };
 
-// Утилита для проверки эмодзи
-function isEmoji(char) {
-  const emojiRegex = /[\u{1F600}-\u{1F64F}]|[\u{1F300}-\u{1F5FF}]|[\u{1F680}-\u{1F6FF}]|[\u{1F1E0}-\u{1F1FF}]|[\u{2600}-\u{26FF}]|[\u{2700}-\u{27BF}]/u;
-  return emojiRegex.test(char);
-}
-
-// УЛУЧШЕННАЯ функция переносов с поддержкой эмодзи и висячих предлогов
-function wrapText(ctx, text, maxWidth, isListItem = false) {
+// УЛУЧШЕННАЯ функция переносов с висячими предлогами (БЕЗ токенизации)
+function wrapText(ctx, text, maxWidth) {
   if (!text) return [];
   
-  // Убираем лишние пробелы
+  // Нормализуем пробелы (простая очистка)
   text = text.trim().replace(/\s+/g, ' ');
-  
-  // ТОКЕНИЗАЦИЯ: Защищаем все фразы которые нельзя разрывать
-  const protectedPhrases = [];
-  
-  // Защищаем ВСЕ цифры с любыми символами (включая разорванные пробелами)
-  text = text.replace(/(\d+)\s*([%₽$€£¥]+)/gi, (match, num, symbol) => {
-    const token = `__TOKEN${protectedPhrases.length}__`;
-    protectedPhrases.push(`${num}${symbol}`);
-    return token;
-  });
-  
-  // Защищаем разорванные цифры "9 5 %" 
-  text = text.replace(/(\d+)\s+(\d+)\s*([%₽$€£¥]+)/gi, (match, num1, num2, symbol) => {
-    const token = `__TOKEN${protectedPhrases.length}__`;
-    protectedPhrases.push(`${num1}${num2}${symbol}`);
-    return token;
-  });
-  
-  // Защищаем цифры с единицами времени/измерения
-  text = text.replace(/(\d+)\s+(час|часа|часов|минут|минуты|секунд|секунды|дня|дней|недель|недели|месяцев|месяца|лет|года|годов|км|м|см|мм|кг|г|мг)/gi, (match, num, unit) => {
-    const token = `__TOKEN${protectedPhrases.length}__`;
-    protectedPhrases.push(`${num} ${unit}`);
-    return token;
-  });
   
   const words = text.split(' ');
   const lines = [];
   let currentLine = '';
 
-  // Расширенный список висячих предлогов
+  // Висячие предлоги (короткие слова которые нельзя оставлять в конце строки)
   const hangingWords = [
     'и', 'а', 'но', 'да', 'или', 'либо', 'то', 'не', 'ни', 
     'за', 'для', 'без', 'при', 'про', 'под', 'над', 'через', 'между', 
@@ -86,71 +56,37 @@ function wrapText(ctx, text, maxWidth, isListItem = false) {
     const nextWord = words[i + 1];
     const testLine = currentLine ? `${currentLine} ${word}` : word;
     
-    // Проверяем ширину с учетом эмодзи
-    let width;
-    try {
-      // Временно восстанавливаем токены для точного измерения
-      let measureText = testLine;
-      protectedPhrases.forEach((phrase, index) => {
-        measureText = measureText.replace(new RegExp(`__TOKEN${index}__`, 'g'), phrase);
-      });
-      width = ctx.measureText(measureText).width;
-    } catch (e) {
-      width = testLine.length * 30;
-    }
+    const width = ctx.measureText(testLine).width;
     
     if (width <= maxWidth) {
       currentLine = testLine;
       
-      // Проверка висячих предлогов
+      // Проверяем висячие предлоги
       if (nextWord && hangingWords.includes(word.toLowerCase())) {
-        // Если текущее слово висячее - пытаемся забрать следующие слова
-        let wordsToTake = 1;
-        let testWithMultiple = currentLine;
+        // Пытаемся добавить следующее слово, чтобы избежать висячего предлога
+        const testWithNext = `${currentLine} ${nextWord}`;
+        const widthWithNext = ctx.measureText(testWithNext).width;
         
-        // Пытаемся взять до 3 следующих слов, пока помещается
-        for (let j = 1; j <= Math.min(3, words.length - i - 1); j++) {
-          const nextWords = words.slice(i + 1, i + 1 + j);
-          const testMultiple = `${currentLine} ${nextWords.join(' ')}`;
-          
-          let widthMultiple;
-          try {
-            let measureTextMultiple = testMultiple;
-            protectedPhrases.forEach((phrase, index) => {
-              measureTextMultiple = measureTextMultiple.replace(new RegExp(`__TOKEN${index}__`, 'g'), phrase);
-            });
-            widthMultiple = ctx.measureText(measureTextMultiple).width;
-          } catch (e) {
-            widthMultiple = testMultiple.length * 30;
-          }
-          
-          if (widthMultiple <= maxWidth) {
-            testWithMultiple = testMultiple;
-            wordsToTake = j;
-          } else {
-            break;
-          }
-        }
-        
-        if (wordsToTake > 0) {
-          currentLine = testWithMultiple;
-          i += wordsToTake; // Пропускаем взятые слова
+        if (widthWithNext <= maxWidth) {
+          currentLine = testWithNext;
+          i++; // Пропускаем следующее слово, так как уже добавили
         }
       }
     } else {
-      // НЕ помещается - но проверяем принудительный перенос висячих слов
       if (currentLine) {
+        // Проверяем последнее слово на висячий предлог
         const lastWord = currentLine.split(' ').pop();
         
-        // Если последнее слово в строке висячее - переносим его
         if (lastWord && hangingWords.includes(lastWord.toLowerCase())) {
+          // Переносим висячий предлог на следующую строку
           const wordsInLine = currentLine.split(' ');
           const withoutLastWord = wordsInLine.slice(0, -1).join(' ');
           
           if (withoutLastWord) {
             lines.push(withoutLastWord);
-            currentLine = `${lastWord} ${word}`; // Начинаем новую строку с висячего слова
+            currentLine = `${lastWord} ${word}`;
           } else {
+            // Если вся строка состоит из одного висячего слова
             lines.push(currentLine);
             currentLine = word;
           }
@@ -159,9 +95,9 @@ function wrapText(ctx, text, maxWidth, isListItem = false) {
           currentLine = word;
         }
       } else {
-        // Очень длинное слово
-        if (word.length > 25) {
-          const chunks = word.match(/.{1,20}/g) || [word];
+        // Слово слишком длинное для строки
+        if (word.length > 20) {
+          const chunks = word.match(/.{1,15}/g) || [word];
           lines.push(...chunks.slice(0, -1));
           currentLine = chunks[chunks.length - 1];
         } else {
@@ -176,25 +112,10 @@ function wrapText(ctx, text, maxWidth, isListItem = false) {
     lines.push(currentLine);
   }
   
-  // ВОССТАНАВЛИВАЕМ ТОКЕНЫ в финальных строках
-  return lines.map(line => {
-    let finalLine = line;
-    protectedPhrases.forEach((phrase, index) => {
-      finalLine = finalLine.replace(new RegExp(`__TOKEN${index}__`, 'g'), phrase);
-    });
-    
-    return finalLine
-      .replace(/\s{2,}/g, ' ')
-      .trim();
-  });
+  return lines;
 }
 
 function parseMarkdownToSlides(text) {
-  // Исправляем разорванные цифры СРАЗУ в исходном тексте
-  text = text
-    .replace(/(\d+)\s+(\d+)\s*([%₽$€£¥])/gi, '$1$2$3') // "9 5 %" → "95%"
-    .replace(/(\d+)\s+([%₽$€£¥])/gi, '$1$2');           // "95 %" → "95%"
-  
   const tokens = marked.lexer(text);
   const slides = [];
   let currentSlide = null;
@@ -242,7 +163,7 @@ function parseMarkdownToSlides(text) {
     }
   });
 
-  // Объединяем контент И исправляем цифры в каждом слайде
+  // Объединяем контент
   slides.forEach(slide => {
     if (slide.content) {
       const paragraphs = slide.content.filter(c => c.type === 'paragraph').map(c => c.text);
@@ -262,18 +183,6 @@ function parseMarkdownToSlides(text) {
       slide.text = fullText;
       delete slide.content;
     }
-    
-    // Дополнительная очистка для каждого слайда
-    if (slide.title) {
-      slide.title = slide.title
-        .replace(/(\d+)\s+(\d+)\s*([%₽$€£¥])/gi, '$1$2$3')
-        .replace(/(\d+)\s+([%₽$€£¥])/gi, '$1$2');
-    }
-    if (slide.text) {
-      slide.text = slide.text
-        .replace(/(\d+)\s+(\d+)\s*([%₽$€£¥])/gi, '$1$2$3')
-        .replace(/(\d+)\s+([%₽$€£¥])/gi, '$1$2');
-    }
   });
 
   return slides;
@@ -289,7 +198,7 @@ function renderSlideToCanvas(slide, slideNumber, totalSlides, settings) {
   const canvas = createCanvas(CONFIG.CANVAS.WIDTH, CONFIG.CANVAS.HEIGHT);
   const ctx = canvas.getContext('2d');
   
-  // Включаем сглаживание для лучшего качества эмодзи
+  // Включаем сглаживание для эмодзи
   ctx.textRenderingOptimization = 'optimizeQuality';
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = 'high';
@@ -373,7 +282,7 @@ function renderIntroSlide(ctx, slide, contentY, contentHeight, contentWidth) {
 function renderTextSlide(ctx, slide, contentY, contentWidth) {
   let y = contentY;
   
-  // Заголовок (БЕЗ extremeCleanText)
+  // Заголовок
   if (slide.title) {
     const hasText = slide.text && slide.text.trim();
     ctx.font = hasText ? CONFIG.FONTS.TITLE_TEXT_WITH_CONTENT : CONFIG.FONTS.TITLE_TEXT_ONLY;
@@ -388,7 +297,7 @@ function renderTextSlide(ctx, slide, contentY, contentWidth) {
     if (hasText) y += 64;
   }
 
-  // Текст (БЕЗ extremeCleanText)
+  // Текст с улучшенной обработкой списков
   if (slide.text) {
     ctx.font = CONFIG.FONTS.TEXT;
     ctx.textAlign = 'left';
@@ -397,7 +306,7 @@ function renderTextSlide(ctx, slide, contentY, contentWidth) {
     
     textLines.forEach(line => {
       if (line.trim().startsWith('•')) {
-        // Логика для списков
+        // Улучшенная логика для списков
         const itemText = line.replace(/^•\s*/, '');
         
         // Рендерим буллет
@@ -409,7 +318,8 @@ function renderTextSlide(ctx, slide, contentY, contentWidth) {
         const textX = bulletX + bulletWidth;
         const availableWidth = contentWidth - bulletWidth;
         
-        const wrappedLines = wrapText(ctx, itemText, availableWidth, true);
+        // Переносим текст с учетом доступной ширины
+        const wrappedLines = wrapText(ctx, itemText, availableWidth);
         
         wrappedLines.forEach((wrappedLine, index) => {
           ctx.fillText(wrappedLine, textX, y + (index * 72));
@@ -452,7 +362,7 @@ function renderQuoteSlide(ctx, slide, contentY, contentHeight, contentWidth) {
 app.get('/health', (req, res) => {
   res.json({ 
     status: 'production-ready',
-    engine: 'canvas-api-with-emoji',
+    engine: 'canvas-api-perfect',
     performance: 'optimized',
     memory: 'efficient',
     features: ['emoji-support', 'smart-wrapping', 'hanging-prevention']
@@ -461,7 +371,7 @@ app.get('/health', (req, res) => {
 
 app.post('/api/generate-carousel', async (req, res) => {
   const startTime = Date.now();
-  console.log('🎯 Генерация через Canvas API с поддержкой эмодзи...');
+  console.log('🎯 Генерация через Canvas API с умными переносами...');
   
   try {
     const { text, settings = {} } = req.body;
@@ -523,7 +433,7 @@ app.post('/api/generate-carousel', async (req, res) => {
         generatedAt: new Date().toISOString(),
         processingTime,
         settings,
-        engine: 'canvas-api-production-emoji',
+        engine: 'canvas-api-perfect',
         features: {
           emojiSupport: true,
           smartWrapping: true,
@@ -583,7 +493,7 @@ process.on('SIGTERM', () => {
 
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => {
-  console.log(`🚀 PRODUCTION Canvas API с эмодзи на порту ${PORT}`);
+  console.log(`🚀 PRODUCTION Canvas API с умными переносами на порту ${PORT}`);
   console.log(`⚡ Готов к высоким нагрузкам`);
   console.log(`🎯 Фичи: эмодзи, умные переносы, предотвращение висячих предлогов`);
 });
