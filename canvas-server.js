@@ -32,10 +32,27 @@ const CONFIG = {
   }
 };
 
-// Утилита для проверки эмодзи
-function isEmoji(char) {
-  const emojiRegex = /[\u{1F600}-\u{1F64F}]|[\u{1F300}-\u{1F5FF}]|[\u{1F680}-\u{1F6FF}]|[\u{1F1E0}-\u{1F1FF}]|[\u{2600}-\u{26FF}]|[\u{2700}-\u{27BF}]/u;
-  return emojiRegex.test(char);
+// Исправленная функция обработки акцентов
+function parseWithCorrectAccents(text) {
+  let html = marked(text);
+  
+  // Убираем лишние <p> теги из marked для лучшего контроля
+  html = html.replace(/<\/?p>/g, '');
+  
+  // ИСПРАВЛЕНИЕ: Склеиваем разорванные цифры ПЕРЕД акцентами
+  html = html.replace(/(\d+)\s+(\d+)\s*([%₽$€£¥])/gi, '$1$2$3');
+  html = html.replace(/(\d+)\s+([%₽$€£¥])/gi, '$1$2');
+  
+  // Цветовые акценты для чисел и времени
+  html = html.replace(/(\d+[%₽$€£¥]|\d+\/\d+|\d+\s*(час|часа|минут|секунд|дня?|недел|месяц|год))/gi, '<span class="accent-blue">$1</span>');
+  
+  // Специальные ключевые слова с подчеркиванием
+  html = html.replace(/(практики|стратегии|качества)/gi, '<span class="accent-blue underline-double">$1</span>');
+  
+  // Обычные ключевые слова без подчеркивания
+  html = html.replace(/(автоматизация|автоматизацию|необходимость)/gi, '<span class="accent-blue">$1</span>');
+  
+  return html;
 }
 
 // РАДИКАЛЬНО УЛУЧШЕННАЯ функция переносов
