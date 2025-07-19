@@ -1,6 +1,6 @@
 FROM node:18-alpine
 
-# Устанавливаем build tools И canvas зависимости
+# Устанавливаем build tools, canvas зависимости И нужные шрифты
 RUN apk add --no-cache \
     make \
     g++ \
@@ -10,7 +10,12 @@ RUN apk add --no-cache \
     giflib-dev \
     pixman-dev \
     libjpeg-turbo-dev \
-    freetype-dev
+    freetype-dev \
+    fontconfig \
+    ttf-dejavu \
+    ttf-liberation \
+    font-noto \
+    font-noto-emoji
 
 WORKDIR /app
 
@@ -19,6 +24,9 @@ COPY package*.json ./
 RUN npm install --only=production && npm cache clean --force
 
 COPY . ./
+
+# Обновляем кэш шрифтов
+RUN fc-cache -fv
 
 RUN addgroup -g 1001 -S nodejs && \
     adduser -S carousel -u 1001 -G nodejs && \
