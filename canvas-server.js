@@ -215,16 +215,19 @@ function wrapText(ctx, text, maxWidth, isListItem = false) {
       finalLine = finalLine.replace(new RegExp(`__TOKEN${index}__`, 'g'), phrase);
     });
     
-    // Агрессивная очистка пробелов
+    // УБИРАЕМ агрессивную очистку которая ЛОМАЕТ цифры
     return finalLine
-      .replace(/(\d+)\s+(\d+)\s*([%₽$€£¥]+)/gi, '$1$2$3') // "9 5 %" → "95%"
-      .replace(/(\d+)\s+([%₽$€£¥]+)/gi, '$1$2')
       .replace(/\s{2,}/g, ' ')
       .trim();
   });
 }
 
 function parseMarkdownToSlides(text) {
+  // ИСПРАВЛЯЕМ разорванные цифры СРАЗУ в исходном тексте
+  text = text
+    .replace(/(\d+)\s+(\d+)\s*([%₽$€£¥])/gi, '$1$2$3') // "9 5 %" → "95%"
+    .replace(/(\d+)\s+([%₽$€£¥])/gi, '$1$2');           // "95 %" → "95%"
+  
   const tokens = marked.lexer(text);
   const slides = [];
   let currentSlide = null;
@@ -272,7 +275,7 @@ function parseMarkdownToSlides(text) {
     }
   });
 
-  // Объединяем контент
+  // Объединяем контент И исправляем цифры в каждом слайде
   slides.forEach(slide => {
     if (slide.content) {
       const paragraphs = slide.content.filter(c => c.type === 'paragraph').map(c => c.text);
@@ -291,6 +294,18 @@ function parseMarkdownToSlides(text) {
       
       slide.text = fullText;
       delete slide.content;
+    }
+    
+    // ДОПОЛНИТЕЛЬНАЯ очистка для каждого слайда
+    if (slide.title) {
+      slide.title = slide.title
+        .replace(/(\d+)\s+(\d+)\s*([%₽$€£¥])/gi, '$1$2$3')
+        .replace(/(\d+)\s+([%₽$€£¥])/gi, '$1$2');
+    }
+    if (slide.text) {
+      slide.text = slide.text
+        .replace(/(\d+)\s+(\d+)\s*([%₽$€£¥])/gi, '$1$2$3')
+        .replace(/(\d+)\s+([%₽$€£¥])/gi, '$1$2');
     }
   });
 
