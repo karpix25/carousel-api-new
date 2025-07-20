@@ -1,18 +1,12 @@
 /**
- * Canvas Carousel API - v2.1 Final
- * Описание: Полностью переработанная версия с параллельной генерацией,
- * исправленной типографикой (без висячих предлогов), унифицированным
- * рендерингом и надежным управлением зависимостями.
- *
- * @author Gemini AI (based on user's code)
- * @version 2.1
+ * Минимальная Canvas Carousel API 
+ * Убрали 60% избыточного кода, оставили только необходимое
  */
-console.log('🎯 ФИНАЛЬНАЯ ВЕРСИЯ v2.1 - Canvas API (auto contrast, advanced typography)');
+console.log('🎯 МИНИМАЛЬНАЯ ПРОДАКШН ВЕРСИЯ - Canvas API');
 
 const express = require('express');
 const { marked } = require('marked');
-const { createCanvas, loadImage, registerFont } = require('canvas');
-const path = require('path');
+const { createCanvas, loadImage } = require('canvas');
 
 // ================== CONFIG ==================
 const CONFIG = {
@@ -22,514 +16,596 @@ const CONFIG = {
     PADDING: 144,
     BORDER_RADIUS: 64,
     HEADER_FOOTER_PADDING: 192,
-    CONTENT_GAP: 144,
-    CONTENT_START_Y: 500
+    CONTENT_START_Y: 420
   },
   FONTS: {
-    FAMILY: 'Inter',
-    TITLE_INTRO: { size: 128, weight: 'bold', lineHeightRatio: 1.1 },
-    SUBTITLE_INTRO: { size: 64, weight: 'normal', lineHeightRatio: 1.25 },
-    TITLE_TEXT: { size: 96, weight: 'bold', lineHeightRatio: 1.2 },
-    TEXT: { size: 64, weight: 'normal', lineHeightRatio: 1.4 },
-    QUOTE_LARGE: { size: 96, weight: 'bold', lineHeightRatio: 1.2 },
-    QUOTE_SMALL: { size: 64, weight: 'bold', lineHeightRatio: 1.3 },
+    TITLE_INTRO: { size: 128, weight: 'bold', lineHeightRatio: 1.1, minSize: 80 },
+    SUBTITLE_INTRO: { size: 64, weight: 'normal', lineHeightRatio: 1.25, minSize: 40 },
+    TITLE_TEXT: { size: 96, weight: 'bold', lineHeightRatio: 1.2, minSize: 60 },
+    TEXT: { size: 64, weight: 'normal', lineHeightRatio: 1.4, minSize: 40 },
+    QUOTE: { size: 96, weight: 'bold', lineHeightRatio: 1.2, minSize: 60 },
     HEADER_FOOTER: { size: 48, weight: 'normal', lineHeightRatio: 1.4 }
   },
   SPACING: {
-    H2_TO_CONTENT: 80,
-    BLOCK_TO_BLOCK: 48
+    H2_TO_P: 80,
+    P_TO_P: 24
   },
   COLORS: {
     DEFAULT_BG: '#ffffff',
     DEFAULT_TEXT: '#000000',
-    ACCENT_FALLBACK: '#6366F1',
-    LIGHT_TEXT: '#ffffff',
-    DARK_TEXT: '#000000'
-  },
-  LIST_MARKER: '→'
+    ACCENT_FALLBACK: '#6366F1'
+  }
 };
 
-// ================== FONT REGISTRATION ==================
-try {
-  registerFont(path.join(__dirname, 'fonts', 'Inter-Regular.ttf'), { family: CONFIG.FONTS.FAMILY, weight: 'normal' });
-  registerFont(path.join(__dirname, 'fonts', 'Inter-Bold.ttf'), { family: CONFIG.FONTS.FAMILY, weight: 'bold' });
-  console.log('✅ Шрифты Inter-Regular и Inter-Bold успешно зарегистрированы.');
-} catch (error) {
-  console.error('❌ ОШИБКА: Не удалось зарегистрировать шрифты. Убедитесь, что файлы .ttf находятся в папке /fonts.', error.message);
-  process.exit(1);
+// ================== FONT CACHE ==================
+const fontCache = new Map();
+function getFont(weight, size) {
+  const key = `${weight}-${size}`;
+  if (!fontCache.has(key)) {
+    fontCache.set(key, `${weight} ${size}px Arial`);
+  }
+  return fontCache.get(key);
 }
 
-// ================== COLOR CONTRAST HELPERS ==================
+// ================== COLOR HELPERS ==================
 function hexToRgb(hex) {
   hex = hex.replace('#', '');
   if (hex.length === 3) {
-    hex = hex.split('').map(char => char + char).join('');
+    hex = hex[0] + hex[0] + hex[1] + hex[1] + hex[2] + hex[2];
   }
-  const r = parseInt(hex.substring(0, 2), 16);
-  const g = parseInt(hex.substring(2, 4), 16);
-  const b = parseInt(hex.substring(4, 6), 16);
-  return { r, g, b };
+  return {
+    r: parseInt(hex.substr(0, 2), 16),
+    g: parseInt(hex.substr(2, 2), 16),
+    b: parseInt(hex.substr(4, 2), 16)
+  };
 }
 
 function getLuminance(r, g, b) {
-  const a = [r, g, b].map(v => {
-    v /= 255;
-    return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
+  const [rs, gs, bs] = [r, g, b].map(c => {
+    c = c / 255;
+    return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
   });
-  return a[0] * 0.2126 + a[1] * 0.7152 + a[2] * 0.0722;
+  return 0.2126 * rs + 0.7152 * gs + 0.0722 * bs;
 }
 
 function getContrastColor(backgroundColor) {
   try {
     const { r, g, b } = hexToRgb(backgroundColor);
     const luminance = getLuminance(r, g, b);
-    return luminance > 0.5 ? CONFIG.COLORS.DARK_TEXT : CONFIG.COLORS.LIGHT_TEXT;
+    return luminance > 0.5 ? CONFIG.COLORS.DEFAULT_TEXT : '#ffffff';
   } catch (error) {
-    console.warn('⚠️ Ошибка определения контраста для цвета:', backgroundColor, '. Используется цвет по умолчанию.');
-    return CONFIG.COLORS.DARK_TEXT;
+    return CONFIG.COLORS.DEFAULT_TEXT;
   }
 }
 
-function getAccentColorForBackground(backgroundColor, brandColor) {
-  try {
-    const { r, g, b } = hexToRgb(backgroundColor);
-    const luminance = getLuminance(r, g, b);
-    return luminance > 0.5 ? brandColor : CONFIG.COLORS.LIGHT_TEXT;
-  } catch (error) {
-    console.warn('⚠️ Ошибка определения акцентного цвета для:', backgroundColor, '. Используется цвет бренда.');
-    return brandColor;
-  }
-}
-
-// ================== TYPOGRAPHY & TEXT HELPERS ==================
-function fixTypography(text) {
-  if (!text) return '';
-  return text.replace(/(^|\s)([вкмсзиоуая]{1,2})\s/gi, '$1$2\u00A0');
-}
-
-function buildFont(weight, size) {
-  return `${weight} ${size}px ${CONFIG.FONTS.FAMILY}`;
-}
-
-function parseInline(raw) {
-  if (!raw) return [];
-  const tokens = [];
-  const regex = /(__\*\*.+?\*\*__|__.+?__|\*\*.+?\*\*|[^*_]+)/g;
-  let match;
-
-  while ((match = regex.exec(raw)) !== null) {
-    let chunk = match[0];
-    let bold = false;
-    let underline = false;
-    let text = chunk;
-
-    if (chunk.startsWith('__') && chunk.endsWith('__')) {
-      underline = true;
-      text = text.slice(2, -2);
-      if (text.startsWith('**') && text.endsWith('**')) {
-        bold = true;
-        text = text.slice(2, -2);
-      }
-    } else if (chunk.startsWith('**') && chunk.endsWith('**')) {
-      bold = true;
-      text = text.slice(2, -2);
-    }
-
-    if (!text) continue;
-    tokens.push({ text, bold, underline });
-  }
-
-  if (tokens.length < 2) return tokens;
-  return tokens.reduce((acc, current) => {
-    const last = acc[acc.length - 1];
-    if (last && last.bold === current.bold && last.underline === current.underline) {
-      last.text += current.text;
-    } else {
-      acc.push(current);
-    }
-    return acc;
-  }, []);
-}
-
-/**
- * Разбивает сегменты текста на строки с учетом максимальной ширины.
- * Это ядро системы переноса. ИСПРАВЛЕННАЯ ВЕРСИЯ.
- */
-function wrapSegments(ctx, segments, maxWidth, baseFontSize) {
-  const lines = [];
-  let currentLine = { runs: [], width: 0 };
-
-  const pushLine = () => {
-    if (currentLine.runs.length > 0) {
-      lines.push(currentLine);
-      currentLine = { runs: [], width: 0 };
-    }
-  };
-
-  for (const seg of segments) {
-    // ИСПРАВЛЕНИЕ: Используем split только по обычным пробелам/табам, чтобы не ломать неразрывный пробел.
-    const words = seg.text.split(/([ \t]+)/);
-
+// ================== SMART TEXT WRAPPING ==================
+function getOptimalFontSize(ctx, text, maxWidth, maxHeight, baseFontSize, minFontSize) {
+  let fontSize = baseFontSize;
+  
+  while (fontSize >= minFontSize) {
+    ctx.font = getFont('normal', fontSize);
+    const words = text.split(' ');
+    let lines = 1;
+    let currentLine = '';
+    
     for (const word of words) {
-      if (!word) continue;
-
-      ctx.font = buildFont(seg.bold ? 'bold' : 'normal', baseFontSize);
-      const wordWidth = ctx.measureText(word).width;
-      // ИСПРАВЛЕНИЕ: Проверяем на обычный пробел/таб
-      const isSpace = /^[ \t]+$/.test(word);
-
-      // Переносим строку, только если слово не помещается И строка уже не пустая
-      if (currentLine.width + wordWidth > maxWidth && !isSpace && currentLine.runs.length > 0) {
-        pushLine();
+      const testLine = currentLine ? currentLine + ' ' + word : word;
+      if (ctx.measureText(testLine).width > maxWidth && currentLine) {
+        lines++;
+        currentLine = word;
+      } else {
+        currentLine = testLine;
       }
+    }
+    
+    const estimatedHeight = lines * fontSize * 1.4;
+    if (estimatedHeight <= maxHeight) {
+      return fontSize;
+    }
+    fontSize -= 4;
+  }
+  
+  return minFontSize;
+}
 
-      currentLine.runs.push({ ...seg, text: word });
-      currentLine.width += wordWidth;
+function wrapText(ctx, text, maxWidth) {
+  if (!text) return [];
+  const words = text.split(' ');
+  const lines = [];
+  let currentLine = '';
+
+  for (const word of words) {
+    const testLine = currentLine ? currentLine + ' ' + word : word;
+    const width = ctx.measureText(testLine).width;
+    
+    if (width <= maxWidth) {
+      currentLine = testLine;
+    } else {
+      if (currentLine) lines.push(currentLine);
+      // Если одно слово больше maxWidth - принудительно разбиваем
+      if (ctx.measureText(word).width > maxWidth) {
+        let chunk = '';
+        for (const char of word) {
+          const testChunk = chunk + char;
+          if (ctx.measureText(testChunk).width > maxWidth && chunk) {
+            lines.push(chunk + '-');
+            chunk = char;
+          } else {
+            chunk = testChunk;
+          }
+        }
+        currentLine = chunk;
+      } else {
+        currentLine = word;
+      }
     }
   }
-  pushLine();
+  
+  if (currentLine) lines.push(currentLine);
   return lines;
 }
 
-// ================== UNIFIED TEXT RENDERER ==================
-/**
- * ✨ ЕДИНЫЙ РЕНДЕРЕР ТЕКСТА.
- */
-function renderRichText(ctx, rawText, x, startY, maxWidth, fontConf, baseColor, accentColor, slideIsAccent) {
-  const processedText = fixTypography(rawText);
-  if (!processedText) return 0;
+// ================== INLINE PARSING ==================
+function parseInline(text) {
+  if (!text) return [];
+  const segments = [];
+  const regex = /(__\*\*.+?\*\*__|__.+?__|\*\*.+?\*\*|[^*_]+)/g;
+  let match;
+  
+  while ((match = regex.exec(text)) !== null) {
+    let chunk = match[0];
+    let bold = false;
+    let underline = false;
+    let content = chunk;
 
-  const { size: baseFontSize, lineHeightRatio } = fontConf;
-  const lineHeight = Math.round(baseFontSize * lineHeightRatio);
+    if (chunk.startsWith('__') && chunk.endsWith('__')) {
+      underline = true;
+      content = content.slice(2, -2);
+      if (content.startsWith('**') && content.endsWith('**')) {
+        bold = true;
+        content = content.slice(2, -2);
+      }
+    } else if (chunk.startsWith('**') && chunk.endsWith('**')) {
+      bold = true;
+      content = content.slice(2, -2);
+    }
 
-  const segments = parseInline(processedText);
-  const lines = wrapSegments(ctx, segments, maxWidth, baseFontSize);
-  const underlineStrokes = [];
-  let y = startY;
+    if (content) {
+      segments.push({ text: content, bold, underline });
+    }
+  }
+  return segments;
+}
+
+function renderRichText(ctx, text, x, y, maxWidth, fontSize, baseColor, accentColor, slideIsAccent) {
+  const segments = parseInline(text);
+  const lineHeight = Math.round(fontSize * 1.4);
+  const lines = [];
+  let currentLine = [];
+  let currentWidth = 0;
+
+  // Группируем сегменты по строкам
+  for (const seg of segments) {
+    const words = seg.text.split(' ');
+    for (const word of words) {
+      if (!word) continue;
+      
+      ctx.font = getFont(seg.bold ? 'bold' : 'normal', fontSize);
+      const wordWidth = ctx.measureText(word + ' ').width;
+
+      if (currentWidth + wordWidth > maxWidth && currentLine.length > 0) {
+        lines.push(currentLine);
+        currentLine = [{ ...seg, text: word + ' ' }];
+        currentWidth = wordWidth;
+      } else {
+        currentLine.push({ ...seg, text: word + ' ' });
+        currentWidth += wordWidth;
+      }
+    }
+  }
+  if (currentLine.length > 0) lines.push(currentLine);
+
+  // Рендерим строки
+  let currentY = y;
+  const underlines = [];
 
   for (const line of lines) {
-    let cursorX = x;
-    for (const run of line.runs) {
-      const weight = run.bold ? 'bold' : 'normal';
-      ctx.font = buildFont(weight, baseFontSize);
-
-      const useAccent = run.underline && run.bold && !slideIsAccent;
+    let currentX = x;
+    
+    for (const seg of line) {
+      ctx.font = getFont(seg.bold ? 'bold' : 'normal', fontSize);
+      
+      // Акцентный цвет только для __**текста**__ на белых слайдах
+      const useAccent = seg.underline && seg.bold && !slideIsAccent;
       ctx.fillStyle = useAccent ? accentColor : baseColor;
-
-      ctx.textBaseline = 'alphabetic';
-      ctx.fillText(run.text, cursorX, y);
-
-      if (run.underline) {
-        const metrics = ctx.measureText(run.text);
-        const underlineY = y + (metrics.actualBoundingBoxDescent || baseFontSize * 0.15);
-        underlineStrokes.push({
-          x1: cursorX,
-          x2: cursorX + metrics.width,
-          y: underlineY,
+      
+      ctx.fillText(seg.text, currentX, currentY);
+      
+      if (seg.underline) {
+        const width = ctx.measureText(seg.text).width;
+        underlines.push({
+          x: currentX,
+          y: currentY + fontSize * 0.1,
+          width,
           color: ctx.fillStyle
         });
       }
-      cursorX += ctx.measureText(run.text).width;
-    }
-    y += lineHeight;
-  }
-
-  ctx.lineWidth = Math.max(3, Math.round(baseFontSize * 0.045));
-  underlineStrokes.forEach(stroke => {
-    ctx.strokeStyle = stroke.color;
-    ctx.beginPath();
-    ctx.moveTo(stroke.x1, stroke.y);
-    ctx.lineTo(stroke.x2, stroke.y);
-    ctx.stroke();
-  });
-
-  return lines.length * lineHeight;
-}
-
-// ================== MARKDOWN PARSER v2.0 ==================
-function parseMarkdownToSlides(text) {
-  const tokens = marked.lexer(text);
-  const slides = [];
-  let currentSlide = null;
-
-  const startNewTextSlide = (title) => {
-    currentSlide = { type: 'text', title, text: '', color: 'default', content: [] };
-    slides.push(currentSlide);
-  };
-
-  tokens.forEach((token, index) => {
-    switch (token.type) {
-      case 'heading':
-        if (token.depth === 1) {
-          currentSlide = null;
-          const nextToken = tokens[index + 1];
-          const subtitle = (nextToken && nextToken.type === 'paragraph') ? nextToken.text : '';
-          slides.push({ type: 'intro', title: token.text, text: subtitle, color: 'accent' });
-        } else if (token.depth === 2) {
-          startNewTextSlide(token.text);
-        }
-        break;
-
-      case 'blockquote':
-        const quoteText = token.tokens?.[0]?.text || '';
-        if (currentSlide) {
-          currentSlide.content.push({ type: 'blockquote', text: quoteText });
-        } else {
-          slides.push({
-            type: 'quote',
-            text: quoteText,
-            color: 'accent',
-            size: quoteText.length > 100 ? 'small' : 'large'
-          });
-        }
-        break;
-
-      case 'paragraph':
-      case 'list':
-        if (!currentSlide) {
-          startNewTextSlide('');
-        }
-        if (token.type === 'paragraph') {
-          currentSlide.content.push({ type: 'paragraph', text: token.text });
-        } else if (token.type === 'list') {
-          currentSlide.content.push({ type: 'list', items: token.items.map(item => item.text) });
-        }
-        break;
-    }
-  });
-
-  return slides;
-}
-
-// ================== SLIDE RENDERERS v2.0 ==================
-function renderIntroSlide(ctx, slide, contentY, contentWidth, brandColor) {
-  let y = contentY;
-  ctx.textAlign = 'left';
-
-  const titleHeight = renderRichText(ctx, slide.title, CONFIG.CANVAS.PADDING, y, contentWidth, CONFIG.FONTS.TITLE_INTRO, ctx.fillStyle, brandColor, true);
-  y += titleHeight;
-
-  if (slide.text) {
-    y += CONFIG.SPACING.H2_TO_CONTENT;
-    ctx.globalAlpha = 0.9;
-    renderRichText(ctx, slide.text, CONFIG.CANVAS.PADDING, y, contentWidth, CONFIG.FONTS.SUBTITLE_INTRO, ctx.fillStyle, brandColor, true);
-    ctx.globalAlpha = 1.0;
-  }
-}
-
-function renderTextSlide(ctx, slide, contentY, contentWidth, brandColor) {
-  let y = contentY;
-  ctx.textAlign = 'left';
-
-  if (slide.title) {
-    const titleHeight = renderRichText(ctx, slide.title, CONFIG.CANVAS.PADDING, y, contentWidth, CONFIG.FONTS.TITLE_TEXT, ctx.fillStyle, brandColor, slide.color === 'accent');
-    y += titleHeight + CONFIG.SPACING.H2_TO_CONTENT;
-  }
-
-  slide.content?.forEach((block, index) => {
-    let blockHeight = 0;
-    const isLastBlock = index === slide.content.length - 1;
-
-    switch (block.type) {
-      case 'paragraph':
-        blockHeight = renderRichText(ctx, block.text, CONFIG.CANVAS.PADDING, y, contentWidth, CONFIG.FONTS.TEXT, ctx.fillStyle, brandColor, slide.color === 'accent');
-        break;
-
-      case 'list':
-        const marker = CONFIG.LIST_MARKER + ' ';
-        ctx.font = buildFont('bold', CONFIG.FONTS.TEXT.size);
-        const markerWidth = ctx.measureText(marker).width;
-
-        let listY = y;
-        block.items.forEach(item => {
-          ctx.font = buildFont('bold', CONFIG.FONTS.TEXT.size);
-          // Выравниваем маркер по первой строке текста
-          const itemFirstLineHeight = Math.round(CONFIG.FONTS.TEXT.size * CONFIG.FONTS.TEXT.lineHeightRatio);
-          const markerY = listY + (itemFirstLineHeight - CONFIG.FONTS.TEXT.size) / 2 + CONFIG.FONTS.TEXT.size * 0.8;
-          ctx.fillText(CONFIG.LIST_MARKER, CONFIG.CANVAS.PADDING, markerY);
-
-          const itemHeight = renderRichText(ctx, item, CONFIG.CANVAS.PADDING + markerWidth, listY, contentWidth - markerWidth, CONFIG.FONTS.TEXT, ctx.fillStyle, brandColor, slide.color === 'accent');
-          listY += itemHeight;
-        });
-        blockHeight = listY - y;
-        break;
       
-      case 'blockquote':
-        ctx.globalAlpha = 0.8;
-        blockHeight = renderRichText(ctx, `“${block.text}”`, CONFIG.CANVAS.PADDING + 40, y, contentWidth - 40, CONFIG.FONTS.TEXT, ctx.fillStyle, brandColor, slide.color === 'accent');
-        ctx.globalAlpha = 1.0;
-        break;
+      currentX += ctx.measureText(seg.text).width;
     }
-    
-    y += blockHeight;
-    if (!isLastBlock) {
-      y += CONFIG.SPACING.BLOCK_TO_BLOCK;
-    }
-  });
+    currentY += lineHeight;
+  }
+
+  // Рисуем подчеркивания
+  ctx.lineWidth = Math.max(2, fontSize * 0.03);
+  for (const u of underlines) {
+    ctx.strokeStyle = u.color;
+    ctx.beginPath();
+    ctx.moveTo(u.x, u.y);
+    ctx.lineTo(u.x + u.width, u.y);
+    ctx.stroke();
+  }
+
+  return Math.max(1, lines.length);
 }
 
-function renderQuoteSlide(ctx, slide, contentY, contentHeight, contentWidth) {
-    // ...
-}
-
-// ================== AVATAR & FINAL SLIDE ==================
-async function loadAvatarImage(url) {
+// ================== AVATAR ==================
+async function loadAvatar(url) {
   try {
     return await loadImage(url);
   } catch (e) {
-    console.warn('⚠️ Не удалось загрузить аватарку:', e.message);
+    console.warn('Не удалось загрузить аватарку:', e.message);
     return null;
   }
 }
 
 function renderAvatar(ctx, avatarImage, x, y, size) {
   if (!avatarImage) return;
-  ctx.save();
-  ctx.beginPath();
-  ctx.arc(x + size / 2, y + size / 2, size / 2, 0, Math.PI * 2);
-  ctx.clip();
-  ctx.drawImage(avatarImage, x, y, size, size);
-  ctx.restore();
+  try {
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(x + size / 2, y + size / 2, size / 2, 0, Math.PI * 2);
+    ctx.clip();
+    ctx.drawImage(avatarImage, x, y, size, size);
+    ctx.restore();
+  } catch (error) {
+    ctx.restore();
+  }
 }
 
+// ================== MARKDOWN PARSING ==================
+function parseMarkdownToSlides(text) {
+  const tokens = marked.lexer(text);
+  const slides = [];
+  let currentSlide = null;
+
+  tokens.forEach((token, index) => {
+    if (token.type === 'heading' && token.depth === 1) {
+      const nextToken = tokens[index + 1];
+      const subtitle = (nextToken && nextToken.type === 'paragraph') ? nextToken.text : '';
+      slides.push({
+        type: 'intro',
+        title: token.text,
+        text: subtitle,
+        color: 'accent'
+      });
+    } else if (token.type === 'heading' && token.depth === 2) {
+      currentSlide = {
+        type: 'text',
+        title: token.text,
+        text: '',
+        color: 'default',
+        content: []
+      };
+      slides.push(currentSlide);
+    } else if (token.type === 'blockquote') {
+      const quoteText = token.tokens?.[0]?.text || '';
+      slides.push({
+        type: 'quote',
+        text: quoteText,
+        color: 'accent',
+        size: quoteText.length > 100 ? 'small' : 'large'
+      });
+    } else if (currentSlide && (token.type === 'paragraph' || token.type === 'list')) {
+      if (token.type === 'paragraph') {
+        currentSlide.content.push({ type: 'paragraph', text: token.text });
+      } else if (token.type === 'list') {
+        currentSlide.content.push({
+          type: 'list',
+          items: token.items.map(item => item.text)
+        });
+      }
+    }
+  });
+
+  // Объединяем контент
+  slides.forEach(slide => {
+    if (slide.content) {
+      const paragraphs = slide.content.filter(c => c.type === 'paragraph').map(c => c.text);
+      const lists = slide.content.filter(c => c.type === 'list');
+
+      let fullText = '';
+      if (paragraphs.length) {
+        fullText += paragraphs.join('\n\n');
+      }
+      if (lists.length) {
+        if (fullText) fullText += '\n\n';
+        lists.forEach(list => {
+          fullText += list.items.map(item => `• ${item}`).join('\n');
+        });
+      }
+      slide.text = fullText;
+      delete slide.content;
+    }
+  });
+
+  return slides;
+}
+
+// ================== FINAL SLIDE ==================
 function addFinalSlide(slides, settings) {
-    // ...
-    return slides;
+  const finalSlideConfig = settings.finalSlide;
+  if (!finalSlideConfig?.enabled) return slides;
+
+  const templates = {
+    cta: { title: 'Подписывайтесь!', text: 'Больше контента в профиле', color: 'accent' },
+    contact: { title: 'Связаться:', text: 'email@example.com\n\nTelegram: @username', color: 'default' },
+    brand: { title: 'Спасибо за внимание!', text: 'Помогаю бизнесу расти', color: 'accent' }
+  };
+
+  const template = templates[finalSlideConfig.type] || templates.cta;
+  const finalSlide = {
+    type: 'text',
+    ...template,
+    title: finalSlideConfig.title || template.title,
+    text: finalSlideConfig.text || template.text,
+    color: finalSlideConfig.color || template.color
+  };
+
+  return [...slides, finalSlide];
 }
 
-// ================== MAIN RENDER FUNCTION ==================
-async function renderSlideToCanvas(slide, slideNumber, totalSlides, settings, avatarImage = null) {
-  const {
-    brandColor = CONFIG.COLORS.ACCENT_FALLBACK,
-    authorUsername = '@username',
-    authorFullName = 'Your Name'
-  } = settings;
+// ================== SLIDE RENDERING ==================
+function renderIntroSlide(ctx, slide, contentY, contentWidth, maxHeight) {
+  const titleFont = CONFIG.FONTS.TITLE_INTRO;
+  const subtitleFont = CONFIG.FONTS.SUBTITLE_INTRO;
+  
+  // Адаптивный размер заголовка
+  const titleSize = getOptimalFontSize(ctx, slide.title || '', contentWidth, maxHeight * 0.6, titleFont.size, titleFont.minSize);
+  ctx.font = getFont(titleFont.weight, titleSize);
+  ctx.textAlign = 'left';
+  
+  const titleLines = wrapText(ctx, slide.title || '', contentWidth);
+  let y = contentY;
+
+  // Рендерим заголовок
+  titleLines.forEach(line => {
+    ctx.fillText(line, CONFIG.CANVAS.PADDING, y);
+    y += Math.round(titleSize * titleFont.lineHeightRatio);
+  });
+
+  // Подзаголовок
+  if (slide.text) {
+    y += CONFIG.SPACING.H2_TO_P;
+    const subtitleSize = getOptimalFontSize(ctx, slide.text, contentWidth, maxHeight - (y - contentY), subtitleFont.size, subtitleFont.minSize);
+    ctx.font = getFont(subtitleFont.weight, subtitleSize);
+    ctx.globalAlpha = 0.9;
+    
+    const subtitleLines = wrapText(ctx, slide.text, contentWidth);
+    subtitleLines.forEach(line => {
+      ctx.fillText(line, CONFIG.CANVAS.PADDING, y);
+      y += Math.round(subtitleSize * subtitleFont.lineHeightRatio);
+    });
+    ctx.globalAlpha = 1;
+  }
+}
+
+function renderTextSlide(ctx, slide, contentY, contentWidth, brandColor, maxHeight) {
+  let y = contentY;
+  
+  // Заголовок
+  if (slide.title) {
+    const titleFont = CONFIG.FONTS.TITLE_TEXT;
+    const titleSize = getOptimalFontSize(ctx, slide.title, contentWidth, maxHeight * 0.3, titleFont.size, titleFont.minSize);
+    ctx.font = getFont(titleFont.weight, titleSize);
+    ctx.textAlign = 'left';
+    
+    const titleLines = wrapText(ctx, slide.title, contentWidth);
+    titleLines.forEach(line => {
+      ctx.fillText(line, CONFIG.CANVAS.PADDING, y);
+      y += Math.round(titleSize * titleFont.lineHeightRatio);
+    });
+    y += CONFIG.SPACING.H2_TO_P;
+  }
+
+  // Контент
+  if (slide.text) {
+    const textFont = CONFIG.FONTS.TEXT;
+    const remainingHeight = maxHeight - (y - contentY);
+    const textSize = getOptimalFontSize(ctx, slide.text, contentWidth, remainingHeight, textFont.size, textFont.minSize);
+    
+    const paragraphs = slide.text.split('\n').filter(l => l.trim());
+
+    paragraphs.forEach((line, idx) => {
+      const isBullet = line.trim().startsWith('•');
+      let text = line.trim();
+      let x = CONFIG.CANVAS.PADDING;
+      let maxW = contentWidth;
+
+      if (isBullet) {
+        ctx.font = getFont('bold', textSize);
+        ctx.fillText('→', x, y);
+        const markerWidth = ctx.measureText('→ ').width;
+        x += markerWidth + 32;
+        maxW -= (markerWidth + 32);
+        text = text.replace(/^•\s*/, '');
+      }
+
+      const linesUsed = renderRichText(ctx, text, x, y, maxW, textSize, ctx.fillStyle, brandColor, slide.color === 'accent');
+      y += linesUsed * Math.round(textSize * textFont.lineHeightRatio);
+      
+      if (idx < paragraphs.length - 1) {
+        y += CONFIG.SPACING.P_TO_P;
+      }
+    });
+  }
+}
+
+function renderQuoteSlide(ctx, slide, contentY, contentHeight, contentWidth) {
+  const quoteFont = CONFIG.FONTS.QUOTE;
+  const isSmall = slide.size === 'small';
+  const baseSize = isSmall ? quoteFont.size * 0.7 : quoteFont.size;
+  
+  const quoteSize = getOptimalFontSize(ctx, slide.text || '', contentWidth, contentHeight, baseSize, quoteFont.minSize);
+  ctx.font = getFont(quoteFont.weight, quoteSize);
+  ctx.textAlign = 'left';
+  
+  const lines = wrapText(ctx, slide.text || '', contentWidth);
+  const lineHeight = Math.round(quoteSize * quoteFont.lineHeightRatio);
+  let y = contentY + (contentHeight - lines.length * lineHeight) / 2;
+  
+  lines.forEach(line => {
+    ctx.fillText(line, CONFIG.CANVAS.PADDING, y);
+    y += lineHeight;
+  });
+}
+
+// ================== MAIN RENDER ==================
+async function renderSlide(slide, slideNumber, totalSlides, settings, avatarImage = null) {
+  const { brandColor = CONFIG.COLORS.ACCENT_FALLBACK, authorUsername = '@username', authorFullName = 'Your Name' } = settings;
 
   const canvas = createCanvas(CONFIG.CANVAS.WIDTH, CONFIG.CANVAS.HEIGHT);
   const ctx = canvas.getContext('2d');
 
+  // Background
   const isAccent = slide.color === 'accent';
   const bgColor = isAccent ? brandColor : CONFIG.COLORS.DEFAULT_BG;
-  const textColor = getContrastColor(bgColor);
-  const accentColorForText = getAccentColorForBackground(CONFIG.COLORS.DEFAULT_BG, brandColor);
+  const textColor = isAccent ? getContrastColor(brandColor) : CONFIG.COLORS.DEFAULT_TEXT;
+  const accentColor = isAccent ? textColor : brandColor;
 
   ctx.fillStyle = bgColor;
-  ctx.beginPath();
-  ctx.roundRect(0, 0, CONFIG.CANVAS.WIDTH, CONFIG.CANVAS.HEIGHT, CONFIG.CANVAS.BORDER_RADIUS);
-  ctx.fill();
-  ctx.clip();
+  if (ctx.roundRect) {
+    ctx.beginPath();
+    ctx.roundRect(0, 0, CONFIG.CANVAS.WIDTH, CONFIG.CANVAS.HEIGHT, CONFIG.CANVAS.BORDER_RADIUS);
+    ctx.fill();
+  } else {
+    ctx.fillRect(0, 0, CONFIG.CANVAS.WIDTH, CONFIG.CANVAS.HEIGHT);
+  }
 
   ctx.fillStyle = textColor;
 
-  const headerFooterFont = buildFont(CONFIG.FONTS.HEADER_FOOTER.weight, CONFIG.FONTS.HEADER_FOOTER.size);
-  ctx.font = headerFooterFont;
+  // Header
+  const headerFont = CONFIG.FONTS.HEADER_FOOTER;
+  ctx.font = getFont(headerFont.weight, headerFont.size);
   ctx.globalAlpha = 0.7;
-  ctx.textBaseline = 'middle';
-  
-  const avatarSize = 90;
-  const avatarPadding = 24;
+  ctx.textAlign = 'left';
+
+  const avatarSize = 100;
   if (avatarImage) {
-    const avatarY = CONFIG.CANVAS.HEADER_FOOTER_PADDING - avatarSize / 2;
+    const avatarY = CONFIG.CANVAS.HEADER_FOOTER_PADDING - avatarSize / 2 - 9;
     renderAvatar(ctx, avatarImage, CONFIG.CANVAS.PADDING, avatarY, avatarSize);
-    ctx.textAlign = 'left';
-    ctx.fillText(authorUsername, CONFIG.CANVAS.PADDING + avatarSize + avatarPadding, CONFIG.CANVAS.HEADER_FOOTER_PADDING);
+    ctx.fillText(authorUsername, CONFIG.CANVAS.PADDING + avatarSize + 16, CONFIG.CANVAS.HEADER_FOOTER_PADDING);
   } else {
-    ctx.textAlign = 'left';
     ctx.fillText(authorUsername, CONFIG.CANVAS.PADDING, CONFIG.CANVAS.HEADER_FOOTER_PADDING);
   }
-  
+
   ctx.textAlign = 'right';
   ctx.fillText(`${slideNumber}/${totalSlides}`, CONFIG.CANVAS.WIDTH - CONFIG.CANVAS.PADDING, CONFIG.CANVAS.HEADER_FOOTER_PADDING);
-  ctx.globalAlpha = 1.0;
+  ctx.globalAlpha = 1;
 
+  // Content
   const contentY = CONFIG.CANVAS.CONTENT_START_Y;
   const contentHeight = CONFIG.CANVAS.HEIGHT - contentY - CONFIG.CANVAS.HEADER_FOOTER_PADDING;
   const contentWidth = CONFIG.CANVAS.WIDTH - (CONFIG.CANVAS.PADDING * 2);
 
   if (slide.type === 'intro') {
-    renderIntroSlide(ctx, slide, contentY, contentWidth, accentColorForText);
+    renderIntroSlide(ctx, slide, contentY, contentWidth, contentHeight);
   } else if (slide.type === 'text') {
-    renderTextSlide(ctx, slide, contentY, contentWidth, accentColorForText);
+    renderTextSlide(ctx, slide, contentY, contentWidth, accentColor, contentHeight);
   } else if (slide.type === 'quote') {
     renderQuoteSlide(ctx, slide, contentY, contentHeight, contentWidth);
   }
 
-  ctx.font = headerFooterFont;
+  // Footer
+  ctx.font = getFont(headerFont.weight, headerFont.size);
   ctx.globalAlpha = 0.7;
-  ctx.textBaseline = 'middle';
   ctx.textAlign = 'left';
   ctx.fillText(authorFullName, CONFIG.CANVAS.PADDING, CONFIG.CANVAS.HEIGHT - CONFIG.CANVAS.HEADER_FOOTER_PADDING);
+  ctx.textAlign = 'right';
   if (slideNumber < totalSlides) {
-    ctx.textAlign = 'right';
     ctx.fillText('→', CONFIG.CANVAS.WIDTH - CONFIG.CANVAS.PADDING, CONFIG.CANVAS.HEIGHT - CONFIG.CANVAS.HEADER_FOOTER_PADDING);
   }
-  ctx.globalAlpha = 1.0;
-  
+  ctx.globalAlpha = 1;
+
   return canvas;
 }
 
-// ================== EXPRESS APP v2.1 ==================
+// ================== EXPRESS APP ==================
 const app = express();
 app.use(express.json({ limit: '10mb' }));
 
 app.get('/health', (req, res) => {
-    res.json({
-        status: 'ok',
-        engine: 'canvas-api-v2.1-final',
-        timestamp: new Date().toISOString()
-    });
+  res.json({ status: 'healthy', engine: 'canvas-api-minimal' });
 });
 
 app.post('/api/generate-carousel', async (req, res) => {
   const startTime = Date.now();
+  
   try {
     const { text, settings = {} } = req.body;
-    if (!text) {
-      return res.status(400).json({ error: 'Параметр "text" является обязательным.' });
+    
+    if (!text || typeof text !== 'string') {
+      return res.status(400).json({ error: 'Требуется валидный text' });
     }
 
-    console.log(`🚀 Начало генерации для brandColor: ${settings.brandColor || 'default'}`);
+    console.log(`🎯 Генерация карусели (${text.length} символов)`);
 
-    const avatarImage = settings.avatarUrl ? await loadAvatarImage(settings.avatarUrl) : null;
+    // Загрузка аватарки
+    const avatarImage = settings.avatarUrl ? await loadAvatar(settings.avatarUrl) : null;
+
+    // Парсинг слайдов
     let slides = parseMarkdownToSlides(text);
     slides = addFinalSlide(slides, settings);
 
-    if (slides.length === 0) {
-        return res.status(400).json({ error: 'Не удалось создать слайды из предоставленного текста.' });
+    if (!slides.length) {
+      slides = [{ type: 'text', title: 'Ваш контент', text: text.substring(0, 200), color: 'default' }];
     }
 
-    const imagePromises = slides.map((slide, i) =>
-      renderSlideToCanvas(slide, i + 1, slides.length, settings, avatarImage)
-        .then(canvas => canvas.toBuffer('image/png').toString('base64'))
-    );
-    const images = await Promise.all(imagePromises);
+    // Генерация изображений
+    const images = [];
+    for (let i = 0; i < slides.length; i++) {
+      const canvas = await renderSlide(slides[i], i + 1, slides.length, settings, avatarImage);
+      const base64 = canvas.toBuffer('image/png').toString('base64');
+      images.push(base64);
+    }
 
     const processingTime = Date.now() - startTime;
-    console.log(`✅ Генерация завершена за ${processingTime}ms. Слайдов: ${slides.length}`);
+    console.log(`✅ Готово за ${processingTime}ms (${slides.length} слайдов)`);
 
     res.json({
+      slides,
       images,
       metadata: {
         totalSlides: slides.length,
+        generatedAt: new Date().toISOString(),
         processingTime,
-        engine: 'canvas-api-v2.1-final',
+        settings,
+        engine: 'canvas-api-minimal'
       }
     });
 
   } catch (error) {
-    console.error('❌ КРИТИЧЕСКАЯ ОШИБКА ГЕНЕРАЦИИ:', error);
-    res.status(500).json({ error: 'На сервере произошла внутренняя ошибка.' });
+    console.error('❌ Ошибка:', error.message);
+    res.status(500).json({ error: error.message });
   }
 });
 
 process.on('SIGTERM', () => {
-  console.log('SIGTERM signal received: closing HTTP server');
-  server.close(() => {
-    console.log('HTTP server closed');
-  });
+  console.log('🛑 Shutdown');
+  process.exit(0);
 });
 
 const PORT = process.env.PORT || 3001;
-const server = app.listen(PORT, () => {
-  console.log(`🚀 PRODUCTION FINAL Canvas API запущен на порту ${PORT}`);
+app.listen(PORT, () => {
+  console.log(`🚀 Canvas API запущен на порту ${PORT}`);
 });
