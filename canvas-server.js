@@ -46,11 +46,13 @@ function getFontStyle(fontConfig) {
   return { fontCSS, lineHeight };
 }
 
-// ТОЧНО ваша функция + ТОЛЬКО висячие предлоги
+// ТОЧНО ваша функция + ТОЛЬКО висячие предлоги + обработка спецсимволов
 function wrapText(ctx, text, maxWidth) {
   if (!text) return [];
   
-  const words = text.split(' ');
+  // Убираем спецсимволы для правильного расчета ширины
+  const cleanText = text.replace(/[*_]/g, '');
+  const words = cleanText.split(' ');
   const lines = [];
   let currentLine = words[0] || '';
 
@@ -67,16 +69,16 @@ function wrapText(ctx, text, maxWidth) {
     const testLine = currentLine + ' ' + word;
     const width = ctx.measureText(testLine).width;
     
-    if (width < maxWidth) {
+    if (width < maxWidth - 20) { // Добавляем буферную зону 20px
       currentLine = testLine;
       
-      // ДОБАВЛЯЕМ ТОЛЬКО проверку висячих предлогов
+      // УЛУЧШЕННАЯ проверка висячих предлогов
       const nextWord = words[i + 1];
-      if (nextWord && hangingWords.includes(word.toLowerCase())) {
+      if (nextWord && hangingWords.includes(word.toLowerCase().replace(/[*_.,!?]/g, ''))) {
         const testWithNext = currentLine + ' ' + nextWord;
         const widthWithNext = ctx.measureText(testWithNext).width;
         
-        if (widthWithNext < maxWidth) {
+        if (widthWithNext < maxWidth - 20) {
           currentLine = testWithNext;
           i++; // Пропускаем следующее слово
         }
@@ -94,14 +96,14 @@ function wrapText(ctx, text, maxWidth) {
   return lines;
 }
 
-// Простая функция для рендеринга текста с подчеркиванием
+// Простая функция для рендеринга текста с подчеркиванием и жирным
 function renderTextWithUnderline(ctx, text, x, y, maxWidth) {
   // Проверяем есть ли подчеркивание в тексте
   if (!text.includes('__')) {
     // Если нет подчеркивания, используем обычный wrapText
     const lines = wrapText(ctx, text, maxWidth);
     lines.forEach((line, index) => {
-      ctx.fillText(line, x, y + index * ctx.font.lineHeight);
+      ctx.fillText(line, x, y + index * 90);
     });
     return lines.length;
   }
@@ -110,11 +112,19 @@ function renderTextWithUnderline(ctx, text, x, y, maxWidth) {
   const parts = text.split(/(__[^_]+__)/);
   let currentY = y;
   let currentLine = '';
+  let currentX = x;
   
   parts.forEach(part => {
     if (part.startsWith('__') && part.endsWith('__')) {
       // Это подчеркнутый текст
-      const underlineText = part.slice(2, -2);
+      let underlineText = part.slice(2, -2);
+      let isBold = false;
+      
+      // Проверяем есть ли жирный шрифт внутри подчеркивания
+      if (underlineText.startsWith('**') && underlineText.endsWith('**')) {
+        underlineText = underlineText.slice(2, -2);
+        isBold = true;
+      }
       
       // Проверяем поместится ли в текущую строку
       const testLine = currentLine + underlineText;
@@ -123,8 +133,15 @@ function renderTextWithUnderline(ctx, text, x, y, maxWidth) {
       if (testWidth > maxWidth && currentLine) {
         // Рендерим текущую строку и переходим на новую
         ctx.fillText(currentLine, x, currentY);
-        currentY += 90; // line-height для текста 64px * 1.4 ≈ 90px
+        currentY += 90;
         currentLine = '';
+        currentX = x;
+      }
+      
+      // Устанавливаем жирный шрифт если нужно
+      const originalFont = ctx.font;
+      if (isBold) {
+        ctx.font = ctx.font.replace('normal', 'bold');
       }
       
       // Рендерим подчеркнутый текст
@@ -139,6 +156,9 @@ function renderTextWithUnderline(ctx, text, x, y, maxWidth) {
       ctx.strokeStyle = ctx.fillStyle;
       ctx.lineWidth = 3;
       ctx.stroke();
+      
+      // Возвращаем обычный шрифт
+      ctx.font = originalFont;
       
       currentLine += underlineText;
     } else {
