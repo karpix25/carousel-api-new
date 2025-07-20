@@ -222,11 +222,10 @@ function renderSlideToCanvas(slide, slideNumber, totalSlides, settings) {
 }
 
 function renderIntroSlide(ctx, slide, contentY, contentHeight, contentWidth) {
-  ctx.textAlign = 'left'; // Изменили с 'center' на 'left'
-  
-  // Заголовок с responsive line-height - начинается с 450px
+  // Заголовок h1 с responsive line-height - начинается с 450px по левому краю
   const titleStyle = getFontStyle(CONFIG.FONTS.TITLE_INTRO);
   ctx.font = titleStyle.fontCSS;
+  ctx.textAlign = 'left'; // ИСПРАВЛЕНО: по левому краю
   const titleLines = wrapText(ctx, slide.title || '', contentWidth);
   let y = contentY; // Начинаем с 450px
   
@@ -235,12 +234,13 @@ function renderIntroSlide(ctx, slide, contentY, contentHeight, contentWidth) {
     y += titleStyle.lineHeight;
   });
 
-  // Подзаголовок с responsive line-height - типографический отступ
+  // Подзаголовок p - ровно на 10px ниже h1
   if (slide.text) {
     const subtitleStyle = getFontStyle(CONFIG.FONTS.SUBTITLE_INTRO);
     ctx.font = subtitleStyle.fontCSS;
+    ctx.textAlign = 'left'; // ИСПРАВЛЕНО: по левому краю
     ctx.globalAlpha = 0.9;
-    y += Math.round(titleStyle.lineHeight * 0.6); // Типографический отступ h1→p
+    y += 10; // ИСПРАВЛЕНО: ровно 10px ниже
     const subtitleLines = wrapText(ctx, slide.text, contentWidth);
     subtitleLines.forEach(line => {
       ctx.fillText(line, CONFIG.CANVAS.PADDING, y); // По левому краю
@@ -253,7 +253,7 @@ function renderIntroSlide(ctx, slide, contentY, contentHeight, contentWidth) {
 function renderTextSlide(ctx, slide, contentY, contentWidth) {
   let y = contentY; // Начинаем с 450px
   
-  // Заголовок h2 с responsive line-height - всегда с 450px
+  // Заголовок h2 - всегда с 450px
   if (slide.title) {
     const hasText = slide.text && slide.text.trim();
     const titleStyle = getFontStyle(hasText ? CONFIG.FONTS.TITLE_TEXT_WITH_CONTENT : CONFIG.FONTS.TITLE_TEXT_ONLY);
@@ -266,13 +266,13 @@ function renderTextSlide(ctx, slide, contentY, contentWidth) {
       y += titleStyle.lineHeight;
     });
     
-    // Типографический отступ h2→p (современная типографика)
+    // p текст ровно на 10px ниже h2
     if (hasText) {
-      y += Math.round(titleStyle.lineHeight * 0.5); // 50% от line-height заголовка
+      y += 10; // ИСПРАВЛЕНО: ровно 10px ниже
     }
   }
 
-  // Основной текст p - всегда ниже h2 с правильным отступом
+  // Основной текст p с красивыми стрелками
   if (slide.text) {
     const textStyle = getFontStyle(CONFIG.FONTS.TEXT);
     ctx.font = textStyle.fontCSS;
@@ -282,7 +282,8 @@ function renderTextSlide(ctx, slide, contentY, contentWidth) {
     textLines.forEach(line => {
       if (line.trim().startsWith('•')) {
         const itemText = line.replace(/^•\s*/, '');
-        const wrappedLines = wrapText(ctx, '• ' + itemText, contentWidth);
+        // ИСПРАВЛЕНО: красивые стрелки → вместо •
+        const wrappedLines = wrapText(ctx, '→ ' + itemText, contentWidth);
         wrappedLines.forEach(wrappedLine => {
           ctx.fillText(wrappedLine, CONFIG.CANVAS.PADDING, y);
           y += textStyle.lineHeight;
@@ -294,8 +295,8 @@ function renderTextSlide(ctx, slide, contentY, contentWidth) {
           y += textStyle.lineHeight;
         });
       } else {
-        // Отступ между параграфами - типографическая норма
-        y += Math.round(textStyle.lineHeight * 0.75); // 75% от line-height текста
+        // Отступ между параграфами
+        y += Math.round(textStyle.lineHeight * 0.75);
       }
     });
   }
