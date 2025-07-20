@@ -7,24 +7,30 @@ const { createCanvas } = require('canvas');
 const app = express();
 app.use(express.json({ limit: '10mb' }));
 
-// Конфигурация
+// Конфигурация с правильным масштабированием ×4 от веб-версии
 const CONFIG = {
   CANVAS: {
     WIDTH: 1600,
     HEIGHT: 2000,
-    PADDING: 150,
+    PADDING: 144, // 36px × 4 = 144px (боковые отступы)
     BORDER_RADIUS: 64,
-    CONTENT_START_Y: 450 // Контент начинается с 450px от верха
+    HEADER_FOOTER_PADDING: 192, // 48px × 4 = 192px (верх/низ)
+    CONTENT_GAP: 144, // 36px × 4 = 144px (gap между header и content)
+    CONTENT_START_Y: 336 // 192px + 144px = 336px (header + gap)
   },
   FONTS: {
     TITLE_INTRO: { size: 128, weight: 'bold', lineHeightRatio: 1.1 },
     SUBTITLE_INTRO: { size: 64, weight: 'normal', lineHeightRatio: 1.25 },
-    TITLE_TEXT_WITH_CONTENT: { size: 96, weight: 'bold', lineHeightRatio: 1.25 },
+    TITLE_TEXT_WITH_CONTENT: { size: 96, weight: 'bold', lineHeightRatio: 1.2 }, // 24px × 4 = 96px
     TITLE_TEXT_ONLY: { size: 136, weight: 'bold', lineHeightRatio: 1.2 },
-    TEXT: { size: 56, weight: 'normal', lineHeightRatio: 1.3 },
+    TEXT: { size: 64, weight: 'normal', lineHeightRatio: 1.4 }, // 16px × 4 = 64px
     QUOTE_LARGE: { size: 96, weight: 'bold', lineHeightRatio: 1.2 },
     QUOTE_SMALL: { size: 64, weight: 'bold', lineHeightRatio: 1.3 },
-    HEADER_FOOTER: { size: 40, weight: 'normal', lineHeightRatio: 1.4 }
+    HEADER_FOOTER: { size: 48, weight: 'normal', lineHeightRatio: 1.4 } // 12px × 4 = 48px
+  },
+  SPACING: {
+    H2_TO_P: 80, // 20px × 4 = 80px (margin-bottom h2)
+    P_TO_P: 64   // 16px × 4 = 64px (margin-bottom p)
   },
   COLORS: {
     DEFAULT_BG: '#ffffff',
@@ -184,19 +190,19 @@ function renderSlideToCanvas(slide, slideNumber, totalSlides, settings) {
   
   ctx.fillStyle = textColor;
   
-  // Header - отступ 220px сверху
+  // Header - отступ по формуле ×4 от веб-версии
   const headerFooter = getFontStyle(CONFIG.FONTS.HEADER_FOOTER);
   ctx.font = headerFooter.fontCSS;
   ctx.globalAlpha = 0.7;
   ctx.textAlign = 'left';
-  ctx.fillText(authorUsername, CONFIG.CANVAS.PADDING, 220);
+  ctx.fillText(authorUsername, CONFIG.CANVAS.PADDING, CONFIG.CANVAS.HEADER_FOOTER_PADDING);
   ctx.textAlign = 'right';
-  ctx.fillText(`${slideNumber}/${totalSlides}`, CONFIG.CANVAS.WIDTH - CONFIG.CANVAS.PADDING, 220);
+  ctx.fillText(`${slideNumber}/${totalSlides}`, CONFIG.CANVAS.WIDTH - CONFIG.CANVAS.PADDING, CONFIG.CANVAS.HEADER_FOOTER_PADDING);
   ctx.globalAlpha = 1;
 
-  // Content area - начинается с 450px от верха
+  // Content area - начинается с правильного отступа
   const contentY = CONFIG.CANVAS.CONTENT_START_Y;
-  const contentHeight = CONFIG.CANVAS.HEIGHT - contentY - 220; // Учитываем footer отступ
+  const contentHeight = CONFIG.CANVAS.HEIGHT - contentY - CONFIG.CANVAS.HEADER_FOOTER_PADDING;
   const contentWidth = CONFIG.CANVAS.WIDTH - (CONFIG.CANVAS.PADDING * 2);
   
   if (slide.type === 'intro') {
@@ -207,14 +213,14 @@ function renderSlideToCanvas(slide, slideNumber, totalSlides, settings) {
     renderQuoteSlide(ctx, slide, contentY, contentHeight, contentWidth);
   }
 
-  // Footer - отступ 220px снизу
+  // Footer - отступ по формуле ×4 от веб-версии
   ctx.font = headerFooter.fontCSS;
   ctx.globalAlpha = 0.7;
   ctx.textAlign = 'left';
-  ctx.fillText(authorFullName, CONFIG.CANVAS.PADDING, CONFIG.CANVAS.HEIGHT - 220);
+  ctx.fillText(authorFullName, CONFIG.CANVAS.PADDING, CONFIG.CANVAS.HEIGHT - CONFIG.CANVAS.HEADER_FOOTER_PADDING);
   ctx.textAlign = 'right';
   if (slideNumber < totalSlides) {
-    ctx.fillText('→', CONFIG.CANVAS.WIDTH - CONFIG.CANVAS.PADDING, CONFIG.CANVAS.HEIGHT - 220);
+    ctx.fillText('→', CONFIG.CANVAS.WIDTH - CONFIG.CANVAS.PADDING, CONFIG.CANVAS.HEIGHT - CONFIG.CANVAS.HEADER_FOOTER_PADDING);
   }
   ctx.globalAlpha = 1;
 
@@ -222,28 +228,28 @@ function renderSlideToCanvas(slide, slideNumber, totalSlides, settings) {
 }
 
 function renderIntroSlide(ctx, slide, contentY, contentHeight, contentWidth) {
-  // Заголовок h1 с responsive line-height - начинается с 450px по левому краю
+  // Заголовок h1 - начинается с правильного отступа по левому краю
   const titleStyle = getFontStyle(CONFIG.FONTS.TITLE_INTRO);
   ctx.font = titleStyle.fontCSS;
-  ctx.textAlign = 'left'; // ИСПРАВЛЕНО: по левому краю
+  ctx.textAlign = 'left';
   const titleLines = wrapText(ctx, slide.title || '', contentWidth);
-  let y = contentY; // Начинаем с 450px
+  let y = contentY; // Начинаем с 336px
   
   titleLines.forEach(line => {
-    ctx.fillText(line, CONFIG.CANVAS.PADDING, y); // По левому краю
+    ctx.fillText(line, CONFIG.CANVAS.PADDING, y);
     y += titleStyle.lineHeight;
   });
 
-  // Подзаголовок p - ровно на 10px ниже h1
+  // Подзаголовок p - отступ по веб-стандартам
   if (slide.text) {
     const subtitleStyle = getFontStyle(CONFIG.FONTS.SUBTITLE_INTRO);
     ctx.font = subtitleStyle.fontCSS;
-    ctx.textAlign = 'left'; // ИСПРАВЛЕНО: по левому краю
+    ctx.textAlign = 'left';
     ctx.globalAlpha = 0.9;
-    y += 10; // ИСПРАВЛЕНО: ровно 10px ниже
+    y += CONFIG.SPACING.H2_TO_P; // 80px отступ как в веб-версии
     const subtitleLines = wrapText(ctx, slide.text, contentWidth);
     subtitleLines.forEach(line => {
-      ctx.fillText(line, CONFIG.CANVAS.PADDING, y); // По левому краю
+      ctx.fillText(line, CONFIG.CANVAS.PADDING, y);
       y += subtitleStyle.lineHeight;
     });
     ctx.globalAlpha = 1;
@@ -251,41 +257,37 @@ function renderIntroSlide(ctx, slide, contentY, contentHeight, contentWidth) {
 }
 
 function renderTextSlide(ctx, slide, contentY, contentWidth) {
-  let y = contentY; // Начинаем с 450px
+  let y = contentY; // Начинаем с 336px (правильный отступ)
   
-  // Заголовок h2 - всегда с 450px
+  // Заголовок h2 - правильный размер шрифта
   if (slide.title) {
     const hasText = slide.text && slide.text.trim();
-    const titleStyle = getFontStyle(hasText ? CONFIG.FONTS.TITLE_TEXT_WITH_CONTENT : CONFIG.FONTS.TITLE_TEXT_ONLY);
+    const titleStyle = getFontStyle(CONFIG.FONTS.TITLE_TEXT_WITH_CONTENT);
     ctx.font = titleStyle.fontCSS;
     ctx.textAlign = 'left';
     
     const titleLines = wrapText(ctx, slide.title, contentWidth);
-    titleLines.forEach((line, index) => {
+    titleLines.forEach(line => {
       ctx.fillText(line, CONFIG.CANVAS.PADDING, y);
-      // Добавляем line-height только если это НЕ последняя строка заголовка
-      if (index < titleLines.length - 1) {
-        y += titleStyle.lineHeight;
-      }
+      y += titleStyle.lineHeight; // Правильно добавляем line-height для каждой строки
     });
     
-    // p текст ровно на 10px ниже последней строки h2
+    // ИСПРАВЛЕНО: отступ h2→p по веб-стандартам (20px × 4 = 80px)
     if (hasText) {
-      y += 10; // ИСПРАВЛЕНО: 10px от последней строки заголовка, а не от всего блока
+      y += CONFIG.SPACING.H2_TO_P; // 80px отступ
     }
   }
 
-  // Основной текст p с красивыми стрелками
+  // Основной текст p - правильный размер и отступы
   if (slide.text) {
     const textStyle = getFontStyle(CONFIG.FONTS.TEXT);
     ctx.font = textStyle.fontCSS;
     ctx.textAlign = 'left';
     
     const textLines = slide.text.split('\n');
-    textLines.forEach(line => {
+    textLines.forEach((line, lineIndex) => {
       if (line.trim().startsWith('•')) {
         const itemText = line.replace(/^•\s*/, '');
-        // Красивые стрелки → вместо •
         const wrappedLines = wrapText(ctx, '→ ' + itemText, contentWidth);
         wrappedLines.forEach(wrappedLine => {
           ctx.fillText(wrappedLine, CONFIG.CANVAS.PADDING, y);
@@ -297,9 +299,10 @@ function renderTextSlide(ctx, slide, contentY, contentWidth) {
           ctx.fillText(wrappedLine, CONFIG.CANVAS.PADDING, y);
           y += textStyle.lineHeight;
         });
-      } else {
-        // Отступ между параграфами
-        y += Math.round(textStyle.lineHeight * 0.75);
+        // Отступ между параграфами (кроме последнего)
+        if (lineIndex < textLines.length - 1 && textLines[lineIndex + 1].trim()) {
+          y += CONFIG.SPACING.P_TO_P; // 64px между параграфами
+        }
       }
     });
   }
