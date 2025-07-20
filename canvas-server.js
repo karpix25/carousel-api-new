@@ -363,13 +363,13 @@ async function renderSlideToCanvas(slide, slideNumber, totalSlides, settings, av
   ctx.font = headerFooter.fontCSS;
   ctx.globalAlpha = 0.7;
   
-  const avatarSize = 40;
-  const avatarPadding = 12;
+  const avatarSize = 100;
+  const avatarPadding = 16;
   
   if (avatarImage) {
     // Вычисляем позицию для центрирования аватарки с текстом
     const textBaseline = CONFIG.CANVAS.HEADER_FOOTER_PADDING;
-    const avatarY = textBaseline - avatarSize/2 - 12; // Поднято выше
+    const avatarY = textBaseline - avatarSize/2 - 9; // Поднято выше
     
     // Рендерим аватарку
     renderAvatar(ctx, avatarImage, CONFIG.CANVAS.PADDING, avatarY, avatarSize);
