@@ -204,6 +204,14 @@ function wrapSegments(ctx, segments, maxWidth, baseFontSize) {
   let currentRuns = [];
   let currentWidth = 0;
 
+  // Висячие предлоги (как в старой версии)
+  const hangingWords = [
+    'и', 'а', 'но', 'да', 'или', 'либо', 'то', 'не', 'ни', 
+    'за', 'для', 'без', 'при', 'про', 'под', 'над', 'через', 'между', 
+    'из', 'от', 'до', 'на', 'в', 'с', 'у', 'о', 'об', 'во', 'со', 'ко',
+    'что', 'как', 'где', 'когда', 'если', 'чтобы', 'который', 'которая'
+  ];
+
   const pushLine = () => {
     if (currentRuns.length) {
       lines.push({ runs: currentRuns, width: currentWidth });
@@ -212,48 +220,74 @@ function wrapSegments(ctx, segments, maxWidth, baseFontSize) {
     }
   };
 
+  // Собираем все слова из всех сегментов
+  const allWords = [];
   for (const seg of segments) {
-    const parts = seg.text.split(/(\s+)/); // сохраняем пробелы
-    for (const part of parts) {
-      if (!part) continue;
-      const isSpace = /^\s+$/.test(part);
+    const words = seg.text.split(/\s+/).filter(w => w.trim());
+    words.forEach(word => {
+      allWords.push({ ...seg, text: word });
+    });
+  }
 
-      ctx.font = buildFont(seg.bold ? 'bold' : 'normal', baseFontSize);
-      let partWidth = ctx.measureText(part).width;
+  for (let i = 0; i < allWords.length; i++) {
+    const word = allWords[i];
+    ctx.font = buildFont(word.bold ? 'bold' : 'normal', baseFontSize);
+    const wordWidth = ctx.measureText(word.text).width;
+    const spaceWidth = ctx.measureText(' ').width;
 
-      // Если не помещается слово целиком и не пробел
-      if (!isSpace && currentWidth + partWidth > maxWidth) {
-        // Если само слово шире maxWidth — дробим по символам
-        if (partWidth > maxWidth) {
-          let chunk = '';
-          for (const ch of part) {
-            ctx.font = buildFont(seg.bold ? 'bold' : 'normal', baseFontSize);
-            const chWidth = ctx.measureText(ch).width;
+    // Проверяем поместится ли слово
+    const needSpace = currentRuns.length > 0;
+    const totalWidth = currentWidth + (needSpace ? spaceWidth : 0) + wordWidth;
 
-            if (currentWidth + chWidth > maxWidth && chunk) {
-              currentRuns.push({ ...seg, text: chunk });
-              pushLine();
-              chunk = ch;
-              continue;
-            }
+    if (totalWidth <= maxWidth) {
+      // Помещается - добавляем
+      if (needSpace) {
+        currentRuns.push({ ...word, text: ' ' });
+        currentWidth += spaceWidth;
+      }
+      currentRuns.push(word);
+      currentWidth += wordWidth;
+
+      // ПРОВЕРКА ВИСЯЧИХ ПРЕДЛОГОВ
+      const nextWord = allWords[i + 1];
+      if (nextWord && hangingWords.includes(word.text.toLowerCase().replace(/[*_.,!?]/g, ''))) {
+        ctx.font = buildFont(nextWord.bold ? 'bold' : 'normal', baseFontSize);
+        const nextWordWidth = ctx.measureText(nextWord.text).width;
+        const testWidth = currentWidth + spaceWidth + nextWordWidth;
+        
+        if (testWidth <= maxWidth) {
+          // Добавляем пробел и следующее слово
+          currentRuns.push({ ...nextWord, text: ' ' });
+          currentRuns.push(nextWord);
+          currentWidth += spaceWidth + nextWordWidth;
+          i++; // Пропускаем следующее слово
+        }
+      }
+    } else {
+      // Не помещается - переносим
+      if (wordWidth > maxWidth) {
+        // Слово слишком длинное - дробим по символам
+        let chunk = '';
+        for (const ch of word.text) {
+          const chWidth = ctx.measureText(ch).width;
+          if (currentWidth + chWidth > maxWidth && chunk) {
+            currentRuns.push({ ...word, text: chunk });
+            pushLine();
+            chunk = ch;
+            currentWidth = chWidth;
+          } else {
             chunk += ch;
             currentWidth += chWidth;
           }
-          if (chunk) {
-            currentRuns.push({ ...seg, text: chunk });
-          }
-          continue;
         }
-
-        // Перенос целого слова (не помещается)
-        pushLine();
-        if (isSpace) continue; // пропуск ведущего пробела
-        currentRuns.push({ ...seg, text: part });
-        currentWidth = partWidth;
+        if (chunk) {
+          currentRuns.push({ ...word, text: chunk });
+        }
       } else {
-        // Помещается в текущую строку
-        currentRuns.push({ ...seg, text: part });
-        currentWidth += partWidth;
+        // Переносим на новую строку
+        pushLine();
+        currentRuns.push(word);
+        currentWidth = wordWidth;
       }
     }
   }
