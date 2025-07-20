@@ -39,20 +39,88 @@ const CONFIG = {
   }
 };
 
-// Встроенные SVG иконки
-const ICONS = {
-  share: `<svg viewBox="0 0 122.88 108.3" xmlns="http://www.w3.org/2000/svg">
-    <path d="M96.14,12.47l-76.71-1.1,28.3,27.85L96.14,12.47ZM53.27,49l9.88,39.17L102.1,22,53.27,49ZM117,1.6a5.59,5.59,0,0,1,4.9,8.75L66.06,105.21a5.6,5.6,0,0,1-10.44-1.15L41.74,49,1.67,9.57A5.59,5.59,0,0,1,5.65,0L117,1.6Z"/>
-  </svg>`,
+// Простые иконки через Canvas API (без SVG)
+const CANVAS_ICONS = {
+  share: (ctx, x, y, size, color) => {
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    // Рисуем стрелку поделиться через простые фигуры
+    const centerX = x + size/2;
+    const centerY = y + size/2;
+    const s = size/4; // масштаб
+    
+    // Стрелка вправо-вверх
+    ctx.moveTo(centerX - s, centerY);
+    ctx.lineTo(centerX + s, centerY - s);
+    ctx.lineTo(centerX + s/2, centerY - s);
+    ctx.lineTo(centerX + s/2, centerY - s*2);
+    ctx.lineTo(centerX + s*1.5, centerY - s*2);
+    ctx.lineTo(centerX + s*1.5, centerY - s/2);
+    ctx.lineTo(centerX + s, centerY - s/2);
+    ctx.lineTo(centerX + s, centerY);
+    ctx.lineTo(centerX + s*2, centerY + s);
+    ctx.lineTo(centerX - s, centerY + s);
+    ctx.closePath();
+    ctx.fill();
+  },
   
-  heart: `<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-    <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
-  </svg>`,
+  heart: (ctx, x, y, size, color) => {
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    const centerX = x + size/2;
+    const centerY = y + size/2;
+    const s = size/6;
+    
+    // Левая половина сердца
+    ctx.arc(centerX - s, centerY - s/2, s, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // Правая половина сердца  
+    ctx.beginPath();
+    ctx.arc(centerX + s, centerY - s/2, s, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // Нижняя часть сердца (треугольник)
+    ctx.beginPath();
+    ctx.moveTo(centerX - s*2, centerY);
+    ctx.lineTo(centerX, centerY + s*2);
+    ctx.lineTo(centerX + s*2, centerY);
+    ctx.closePath();
+    ctx.fill();
+  },
   
-  arrow: `<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-    <path d="M8.59 16.59L13.17 12 8.59 7.41 10 6l6 6-6 6-1.41-1.41z"/>
-  </svg>`
+  arrow: (ctx, x, y, size, color) => {
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    const centerX = x + size/2;
+    const centerY = y + size/2;
+    const s = size/4;
+    
+    // Стрелка вправо
+    ctx.moveTo(centerX - s, centerY - s);
+    ctx.lineTo(centerX + s, centerY);
+    ctx.lineTo(centerX - s, centerY + s);
+    ctx.lineTo(centerX - s/2, centerY + s/2);
+    ctx.lineTo(centerX + s/2, centerY);
+    ctx.lineTo(centerX - s/2, centerY - s/2);
+    ctx.closePath();
+    ctx.fill();
+  }
 };
+
+// Функция для рендеринга Canvas иконки (без SVG)
+function renderCanvasIcon(ctx, iconName, x, y, size, color = '#000000') {
+  if (!CANVAS_ICONS[iconName]) {
+    console.warn(`Иконка ${iconName} не найдена`);
+    return;
+  }
+  
+  try {
+    CANVAS_ICONS[iconName](ctx, x, y, size, color);
+  } catch (error) {
+    console.warn('Ошибка рендеринга иконки:', error);
+  }
+}
 
 // Функция для загрузки изображения (Canvas API версия)
 async function loadAvatarImage(url) {
@@ -361,13 +429,13 @@ async function renderSlideToCanvas(slide, slideNumber, totalSlides, settings) {
   ctx.font = headerFooter.fontCSS;
   ctx.globalAlpha = 0.7;
   
-  const avatarSize = 40; // ИЗМЕНЕНО: уменьшил с 48 до 40px
-  const avatarPadding = 12; // ИЗМЕНЕНО: уменьшил отступ с 16 до 12px
+  const avatarSize = 100; // ИЗМЕНЕНО: уменьшил с 48 до 40px
+  const avatarPadding = 16; // ИЗМЕНЕНО: уменьшил отступ с 16 до 12px
   
   if (avatarImage) {
     // Вычисляем позицию для центрирования аватарки с текстом
     const textBaseline = CONFIG.CANVAS.HEADER_FOOTER_PADDING;
-    const avatarY = textBaseline - avatarSize/2 - 6; // Центрируем относительно baseline текста
+    const avatarY = textBaseline - avatarSize/2 - 9; // Центрируем относительно baseline текста
     
     // Рендерим аватарку
     renderAvatar(ctx, avatarImage, CONFIG.CANVAS.PADDING, avatarY, avatarSize);
