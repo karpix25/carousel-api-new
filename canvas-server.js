@@ -30,8 +30,8 @@ const CONFIG = {
     HEADER_FOOTER: { size: 48, weight: 'normal', lineHeightRatio: 1.4 }
   },
   SPACING: {
-    H2_TO_P: 80,
-    P_TO_P: 24
+    H2_TO_P: 80,   // 20px × 4 = 80px (margin-bottom h2)
+    P_TO_P: 64     // 16px × 4 = 64px (margin-bottom p) - ИСПРАВЛЕНО!
   },
   COLORS: {
     DEFAULT_BG: '#ffffff',
@@ -143,7 +143,32 @@ function renderAvatar(ctx, avatarImage, x, y, size) {
   ctx.restore();
 }
 
-// ================== INLINE PARSER ==================
+// ================== HANGING WORDS PROCESSOR ==================
+/**
+ * Обрабатывает висячие предлоги в тексте, заменяя обычные пробелы 
+ * после них на неразрывные пробелы
+ */
+function fixHangingWords(text) {
+  if (!text) return text;
+  
+  const hangingWords = [
+    'и', 'а', 'но', 'да', 'или', 'либо', 'то', 'не', 'ни', 
+    'за', 'для', 'без', 'при', 'про', 'под', 'над', 'через', 'между', 
+    'из', 'от', 'до', 'на', 'в', 'с', 'у', 'о', 'об', 'во', 'со', 'ко',
+    'что', 'как', 'где', 'когда', 'если', 'чтобы', 'который', 'которая'
+  ];
+  
+  let result = text;
+  
+  hangingWords.forEach(word => {
+    // Ищем предлог + пробел + следующее слово
+    // \b - граница слова, \s+ - один или более пробелов
+    const regex = new RegExp(`\\b${word}\\s+`, 'gi');
+    result = result.replace(regex, `${word}\u00A0`); // \u00A0 = неразрывный пробел
+  });
+  
+  return result;
+}
 /**
  * Поддержка:
  * __подчеркнуто__
@@ -204,14 +229,6 @@ function wrapSegments(ctx, segments, maxWidth, baseFontSize) {
   let currentRuns = [];
   let currentWidth = 0;
 
-  // Висячие предлоги (как в старой версии)
-  const hangingWords = [
-    'и', 'а', 'но', 'да', 'или', 'либо', 'то', 'не', 'ни', 
-    'за', 'для', 'без', 'при', 'про', 'под', 'над', 'через', 'между', 
-    'из', 'от', 'до', 'на', 'в', 'с', 'у', 'о', 'об', 'во', 'со', 'ко',
-    'что', 'как', 'где', 'когда', 'если', 'чтобы', 'который', 'которая'
-  ];
-
   const pushLine = () => {
     if (currentRuns.length) {
       lines.push({ runs: currentRuns, width: currentWidth });
@@ -223,7 +240,8 @@ function wrapSegments(ctx, segments, maxWidth, baseFontSize) {
   // Собираем все слова из всех сегментов
   const allWords = [];
   for (const seg of segments) {
-    const words = seg.text.split(/\s+/).filter(w => w.trim());
+    // ИЗМЕНЕНО: разбиваем по обычным пробелам, но НЕ по неразрывным (\u00A0)
+    const words = seg.text.split(/[ \t\n]+/).filter(w => w.trim());
     words.forEach(word => {
       allWords.push({ ...seg, text: word });
     });
@@ -247,26 +265,10 @@ function wrapSegments(ctx, segments, maxWidth, baseFontSize) {
       }
       currentRuns.push(word);
       currentWidth += wordWidth;
-
-      // ПРОВЕРКА ВИСЯЧИХ ПРЕДЛОГОВ
-      const nextWord = allWords[i + 1];
-      if (nextWord && hangingWords.includes(word.text.toLowerCase().replace(/[*_.,!?]/g, ''))) {
-        ctx.font = buildFont(nextWord.bold ? 'bold' : 'normal', baseFontSize);
-        const nextWordWidth = ctx.measureText(nextWord.text).width;
-        const testWidth = currentWidth + spaceWidth + nextWordWidth;
-        
-        if (testWidth <= maxWidth) {
-          // Добавляем пробел и следующее слово
-          currentRuns.push({ ...nextWord, text: ' ' });
-          currentRuns.push(nextWord);
-          currentWidth += spaceWidth + nextWordWidth;
-          i++; // Пропускаем следующее слово
-        }
-      }
     } else {
-      // Не помещается - переносим
+      // Не помещается
       if (wordWidth > maxWidth) {
-        // Слово слишком длинное - дробим по символам
+        // Слово слишком длинное - дробим по символам (но сохраняем неразрывные пробелы)
         let chunk = '';
         for (const ch of word.text) {
           const chWidth = ctx.measureText(ch).width;
@@ -305,10 +307,13 @@ function wrapSegments(ctx, segments, maxWidth, baseFontSize) {
 function renderRichText(ctx, rawText, x, startY, maxWidth, fontConf, baseColor, accentColor, slideIsAccent) {
   if (!rawText) return 0;
 
+  // НОВОЕ: Обрабатываем висячие предлоги ДО parsing
+  const processedText = fixHangingWords(rawText);
+
   const { size: baseFontSize, lineHeightRatio } = fontConf;
   const lineHeight = Math.round(baseFontSize * lineHeightRatio);
 
-  const segments = parseInline(rawText);
+  const segments = parseInline(processedText);
   ctx.font = buildFont('normal', baseFontSize);
   const lines = wrapSegments(ctx, segments, maxWidth, baseFontSize);
 
@@ -319,7 +324,10 @@ function renderRichText(ctx, rawText, x, startY, maxWidth, fontConf, baseColor, 
     let cursorX = x;
 
     for (const run of line.runs) {
-      const txt = run.text;
+      let txt = run.text;
+      // НОВОЕ: Преобразуем неразрывные пробелы обратно в обычные для отображения
+      txt = txt.replace(/\u00A0/g, ' ');
+      
       const isSpace = /^\s+$/.test(txt);
       const weight = run.bold ? 'bold' : 'normal';
       ctx.font = buildFont(weight, baseFontSize);
@@ -503,19 +511,33 @@ function renderIntroSlide(ctx, slide, contentY, contentWidth) {
 
 function wrapPlainForIntro(ctx, text, maxWidth) {
   if (!text) return [];
-  const words = text.replace(/[*_]/g, '').split(/\s+/);
+  
+  // НОВОЕ: Обрабатываем висячие предлоги и для intro слайдов
+  const processedText = fixHangingWords(text);
+  const cleanText = processedText.replace(/[*_]/g, '');
+  
+  // Разбиваем по обычным пробелам, НЕ по неразрывным
+  const words = cleanText.split(/[ \t\n]+/).filter(w => w.trim());
   const lines = [];
   let line = '';
+  
   for (const w of words) {
     const test = line ? line + ' ' + w : w;
-    if (ctx.measureText(test).width <= maxWidth) {
+    const testForMeasure = test.replace(/\u00A0/g, ' '); // Заменяем для измерения
+    
+    if (ctx.measureText(testForMeasure).width <= maxWidth) {
       line = test;
     } else {
-      if (line) lines.push(line);
+      if (line) {
+        // Преобразуем неразрывные пробелы обратно для отображения
+        lines.push(line.replace(/\u00A0/g, ' '));
+      }
       line = w;
     }
   }
-  if (line) lines.push(line);
+  if (line) {
+    lines.push(line.replace(/\u00A0/g, ' '));
+  }
   return lines;
 }
 
