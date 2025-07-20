@@ -46,6 +46,23 @@ function getFontStyle(fontConfig) {
   return { fontCSS, lineHeight };
 }
 
+// Функция для рендеринга круглой аватарки
+function renderAvatar(ctx, avatarImage, x, y, size) {
+  if (!avatarImage) return;
+  
+  ctx.save();
+  
+  // Создаем круглую маску
+  ctx.beginPath();
+  ctx.arc(x + size/2, y + size/2, size/2, 0, Math.PI * 2);
+  ctx.clip();
+  
+  // Рисуем изображение в круге
+  ctx.drawImage(avatarImage, x, y, size, size);
+  
+  ctx.restore();
+}
+
 // ТОЧНО ваша функция + ТОЛЬКО висячие предлоги + обработка спецсимволов
 function wrapText(ctx, text, maxWidth) {
   if (!text) return [];
