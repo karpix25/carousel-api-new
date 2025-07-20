@@ -2,7 +2,7 @@ console.log('🎯 ФИНАЛЬНАЯ ПРОДАКШН ВЕРСИЯ - Canvas API'
 
 const express = require('express');
 const { marked } = require('marked');
-const { createCanvas } = require('canvas');
+const { createCanvas, loadImage } = require('canvas'); // ИСПРАВЛЕНО: импортируем loadImage из canvas
 
 const app = express();
 app.use(express.json({ limit: '10mb' }));
@@ -266,15 +266,22 @@ function parseMarkdownToSlides(text) {
   return slides;
 }
 
-function renderSlideToCanvas(slide, slideNumber, totalSlides, settings) {
+async function renderSlideToCanvas(slide, slideNumber, totalSlides, settings) {
   const {
     brandColor = CONFIG.COLORS.ACCENT_FALLBACK,
     authorUsername = '@username',
-    authorFullName = 'Your Name'
+    authorFullName = 'Your Name',
+    avatarUrl = null // Новый параметр для аватарки
   } = settings;
 
   const canvas = createCanvas(CONFIG.CANVAS.WIDTH, CONFIG.CANVAS.HEIGHT);
   const ctx = canvas.getContext('2d');
+  
+  // Загружаем аватарку если указана
+  let avatarImage = null;
+  if (avatarUrl) {
+    avatarImage = await loadAvatarImage(avatarUrl); // Используем правильную функцию
+  }
   
   // Цвета
   const isAccent = slide.color === 'accent';
@@ -289,12 +296,28 @@ function renderSlideToCanvas(slide, slideNumber, totalSlides, settings) {
   
   ctx.fillStyle = textColor;
   
-  // Header - отступ по формуле ×4 от веб-версии
+  // Header - с аватаркой или без
   const headerFooter = getFontStyle(CONFIG.FONTS.HEADER_FOOTER);
   ctx.font = headerFooter.fontCSS;
   ctx.globalAlpha = 0.7;
-  ctx.textAlign = 'left';
-  ctx.fillText(authorUsername, CONFIG.CANVAS.PADDING, CONFIG.CANVAS.HEADER_FOOTER_PADDING);
+  
+  const avatarSize = 48; // Размер аватарки
+  const avatarPadding = 16; // Отступ между аватаркой и текстом
+  
+  if (avatarImage) {
+    // Рендерим аватарку
+    renderAvatar(ctx, avatarImage, CONFIG.CANVAS.PADDING, CONFIG.CANVAS.HEADER_FOOTER_PADDING - avatarSize/2, avatarSize);
+    
+    // Username справа от аватарки
+    ctx.textAlign = 'left';
+    ctx.fillText(authorUsername, CONFIG.CANVAS.PADDING + avatarSize + avatarPadding, CONFIG.CANVAS.HEADER_FOOTER_PADDING);
+  } else {
+    // Обычный header без аватарки
+    ctx.textAlign = 'left';
+    ctx.fillText(authorUsername, CONFIG.CANVAS.PADDING, CONFIG.CANVAS.HEADER_FOOTER_PADDING);
+  }
+  
+  // Номер слайда (всегда справа)
   ctx.textAlign = 'right';
   ctx.fillText(`${slideNumber}/${totalSlides}`, CONFIG.CANVAS.WIDTH - CONFIG.CANVAS.PADDING, CONFIG.CANVAS.HEADER_FOOTER_PADDING);
   ctx.globalAlpha = 1;
@@ -463,6 +486,11 @@ app.post('/api/generate-carousel', async (req, res) => {
       return res.status(400).json({ error: 'Требуется текст' });
     }
 
+    // Логируем настройки для отладки
+    if (settings.avatarUrl) {
+      console.log('🖼️ Используется аватарка:', settings.avatarUrl);
+    }
+
     // Парсинг
     const slides = parseMarkdownToSlides(text);
     
@@ -477,10 +505,10 @@ app.post('/api/generate-carousel', async (req, res) => {
 
     console.log(`📝 Создано слайдов: ${slides.length}`);
 
-    // Рендеринг
+    // Рендеринг с поддержкой аватарки
     const images = [];
     for (let i = 0; i < slides.length; i++) {
-      const canvas = renderSlideToCanvas(slides[i], i + 1, slides.length, settings);
+      const canvas = await renderSlideToCanvas(slides[i], i + 1, slides.length, settings);
       const base64 = canvas.toBuffer('image/png').toString('base64');
       images.push(base64);
     }
@@ -496,7 +524,7 @@ app.post('/api/generate-carousel', async (req, res) => {
         generatedAt: new Date().toISOString(),
         processingTime,
         settings,
-        engine: 'canvas-api-production'
+        engine: 'canvas-api-production-with-avatar'
       }
     });
 
