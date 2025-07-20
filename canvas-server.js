@@ -261,14 +261,17 @@ function renderTextSlide(ctx, slide, contentY, contentWidth) {
     ctx.textAlign = 'left';
     
     const titleLines = wrapText(ctx, slide.title, contentWidth);
-    titleLines.forEach(line => {
+    titleLines.forEach((line, index) => {
       ctx.fillText(line, CONFIG.CANVAS.PADDING, y);
-      y += titleStyle.lineHeight;
+      // Добавляем line-height только если это НЕ последняя строка заголовка
+      if (index < titleLines.length - 1) {
+        y += titleStyle.lineHeight;
+      }
     });
     
-    // p текст ровно на 10px ниже h2
+    // p текст ровно на 10px ниже последней строки h2
     if (hasText) {
-      y += 10; // ИСПРАВЛЕНО: ровно 10px ниже
+      y += 10; // ИСПРАВЛЕНО: 10px от последней строки заголовка, а не от всего блока
     }
   }
 
@@ -282,7 +285,7 @@ function renderTextSlide(ctx, slide, contentY, contentWidth) {
     textLines.forEach(line => {
       if (line.trim().startsWith('•')) {
         const itemText = line.replace(/^•\s*/, '');
-        // ИСПРАВЛЕНО: красивые стрелки → вместо •
+        // Красивые стрелки → вместо •
         const wrappedLines = wrapText(ctx, '→ ' + itemText, contentWidth);
         wrappedLines.forEach(wrappedLine => {
           ctx.fillText(wrappedLine, CONFIG.CANVAS.PADDING, y);
