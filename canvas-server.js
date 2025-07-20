@@ -149,6 +149,20 @@ function createFinalSlide(settings) {
   };
 }
 
+// Функция для рендеринга Canvas иконки (без SVG)
+function renderCanvasIcon(ctx, iconName, x, y, size, color = '#000000') {
+  if (!CANVAS_ICONS[iconName]) {
+    console.warn(`Иконка ${iconName} не найдена`);
+    return;
+  }
+  
+  try {
+    CANVAS_ICONS[iconName](ctx, x, y, size, color);
+  } catch (error) {
+    console.warn('Ошибка рендеринга иконки:', error);
+  }
+}
+
 // Функция для получения CSS шрифта и line-height
 function getFontStyle(fontConfig) {
   const fontCSS = `${fontConfig.weight} ${fontConfig.size}px Arial`;
