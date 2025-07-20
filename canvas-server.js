@@ -94,172 +94,66 @@ function wrapText(ctx, text, maxWidth) {
   return lines;
 }
 
-// Функция для рендеринга текста с форматированием
-function renderFormattedText(ctx, text, x, y, maxWidth, textStyle) {
-  const lines = [];
-  
-  // Парсим форматирование в тексте
-  const formatRegex = /(\*\*[^*]+\*\*|__[^_]+__|==([^=]+)==|!!([^!]+)!!)/g;
-  
-  // Разбиваем текст на сегменты с форматированием
-  const segments = [];
-  let lastIndex = 0;
-  let match;
-  
-  while ((match = formatRegex.exec(text)) !== null) {
-    // Добавляем обычный текст до форматированного
-    if (match.index > lastIndex) {
-      segments.push({
-        text: text.substring(lastIndex, match.index),
-        type: 'normal'
-      });
-    }
-    
-    // Добавляем форматированный сегмент
-    const fullMatch = match[0];
-    if (fullMatch.startsWith('**') && fullMatch.endsWith('**')) {
-      segments.push({
-        text: fullMatch.slice(2, -2),
-        type: 'bold'
-      });
-    } else if (fullMatch.startsWith('__') && fullMatch.endsWith('__')) {
-      segments.push({
-        text: fullMatch.slice(2, -2),
-        type: 'underline'
-      });
-    } else if (fullMatch.startsWith('==') && fullMatch.endsWith('==')) {
-      segments.push({
-        text: fullMatch.slice(2, -2),
-        type: 'highlight'
-      });
-    } else if (fullMatch.startsWith('!!') && fullMatch.endsWith('!!')) {
-      segments.push({
-        text: fullMatch.slice(2, -2),
-        type: 'important'
-      });
-    }
-    
-    lastIndex = formatRegex.lastIndex;
-  }
-  
-  // Добавляем оставшийся текст
-  if (lastIndex < text.length) {
-    segments.push({
-      text: text.substring(lastIndex),
-      type: 'normal'
+// Простая функция для рендеринга текста с подчеркиванием
+function renderTextWithUnderline(ctx, text, x, y, maxWidth) {
+  // Проверяем есть ли подчеркивание в тексте
+  if (!text.includes('__')) {
+    // Если нет подчеркивания, используем обычный wrapText
+    const lines = wrapText(ctx, text, maxWidth);
+    lines.forEach((line, index) => {
+      ctx.fillText(line, x, y + index * ctx.font.lineHeight);
     });
+    return lines.length;
   }
   
-  // Если нет форматирования, используем обычный wrapText
-  if (segments.length <= 1 && segments[0]?.type === 'normal') {
-    return wrapText(ctx, text, maxWidth);
-  }
-  
-  // Рендерим сегменты с форматированием
+  // Разбиваем текст на части с подчеркиванием и без
+  const parts = text.split(/(__[^_]+__)/);
   let currentY = y;
-  let currentX = x;
-  let currentLineText = '';
+  let currentLine = '';
   
-  segments.forEach(segment => {
-    const words = segment.text.split(' ');
-    
-    words.forEach((word, wordIndex) => {
-      const testText = currentLineText + (currentLineText ? ' ' : '') + word;
-      const testWidth = ctx.measureText(testText).width;
+  parts.forEach(part => {
+    if (part.startsWith('__') && part.endsWith('__')) {
+      // Это подчеркнутый текст
+      const underlineText = part.slice(2, -2);
       
-      if (testWidth > maxWidth && currentLineText) {
-        // Рендерим текущую строку
-        renderLineWithFormatting(ctx, currentLineText, x, currentY, textStyle);
-        currentY += textStyle.lineHeight;
-        currentLineText = word;
-      } else {
-        currentLineText = testText;
+      // Проверяем поместится ли в текущую строку
+      const testLine = currentLine + underlineText;
+      const testWidth = ctx.measureText(testLine).width;
+      
+      if (testWidth > maxWidth && currentLine) {
+        // Рендерим текущую строку и переходим на новую
+        ctx.fillText(currentLine, x, currentY);
+        currentY += 90; // line-height для текста 64px * 1.4 ≈ 90px
+        currentLine = '';
       }
-    });
-  });
-  
-  // Рендерим последнюю строку
-  if (currentLineText) {
-    renderLineWithFormatting(ctx, currentLineText, x, currentY, textStyle);
-    currentY += textStyle.lineHeight;
-  }
-  
-  return [(currentY - y) / textStyle.lineHeight]; // Возвращаем количество строк
-}
-
-// Функция для рендеринга строки с форматированием
-function renderLineWithFormatting(ctx, text, x, y, textStyle) {
-  const formatRegex = /(\*\*[^*]+\*\*|__[^_]+__|==([^=]+)==|!!([^!]+)!!)/g;
-  
-  let currentX = x;
-  let lastIndex = 0;
-  let match;
-  
-  // Обычный стиль
-  ctx.font = textStyle.fontCSS;
-  ctx.fillStyle = CONFIG.COLORS.DEFAULT_TEXT;
-  
-  while ((match = formatRegex.exec(text)) !== null) {
-    // Рендерим обычный текст до форматированного
-    if (match.index > lastIndex) {
-      const normalText = text.substring(lastIndex, match.index);
-      ctx.fillText(normalText, currentX, y);
-      currentX += ctx.measureText(normalText).width;
-    }
-    
-    // Рендерим форматированный текст
-    const fullMatch = match[0];
-    let formattedText = '';
-    
-    if (fullMatch.startsWith('**') && fullMatch.endsWith('**')) {
-      // Жирный текст
-      formattedText = fullMatch.slice(2, -2);
-      const boldFont = textStyle.fontCSS.replace(textStyle.weight, 'bold');
-      ctx.font = boldFont;
-      ctx.fillText(formattedText, currentX, y);
-      ctx.font = textStyle.fontCSS; // Возвращаем обычный шрифт
-    } else if (fullMatch.startsWith('__') && fullMatch.endsWith('__')) {
-      // Подчеркнутый текст
-      formattedText = fullMatch.slice(2, -2);
-      ctx.fillText(formattedText, currentX, y);
+      
+      // Рендерим подчеркнутый текст
+      const startX = x + ctx.measureText(currentLine).width;
+      ctx.fillText(underlineText, startX, currentY);
       
       // Рисуем подчеркивание
-      const textWidth = ctx.measureText(formattedText).width;
+      const textWidth = ctx.measureText(underlineText).width;
       ctx.beginPath();
-      ctx.moveTo(currentX, y + 8);
-      ctx.lineTo(currentX + textWidth, y + 8);
+      ctx.moveTo(startX, currentY + 8);
+      ctx.lineTo(startX + textWidth, currentY + 8);
       ctx.strokeStyle = ctx.fillStyle;
-      ctx.lineWidth = 2;
+      ctx.lineWidth = 3;
       ctx.stroke();
-    } else if (fullMatch.startsWith('==') && fullMatch.endsWith('==')) {
-      // Выделение маркером (желтый фон)
-      formattedText = fullMatch.slice(2, -2);
-      const textWidth = ctx.measureText(formattedText).width;
       
-      // Рисуем желтый фон
-      ctx.fillStyle = '#FFEB3B';
-      ctx.fillRect(currentX, y - textStyle.size + 8, textWidth, textStyle.size);
-      
-      // Рисуем текст поверх
-      ctx.fillStyle = CONFIG.COLORS.DEFAULT_TEXT;
-      ctx.fillText(formattedText, currentX, y);
-    } else if (fullMatch.startsWith('!!') && fullMatch.endsWith('!!')) {
-      // Важный текст (красный цвет)
-      formattedText = fullMatch.slice(2, -2);
-      ctx.fillStyle = '#F44336';
-      ctx.fillText(formattedText, currentX, y);
-      ctx.fillStyle = CONFIG.COLORS.DEFAULT_TEXT; // Возвращаем обычный цвет
+      currentLine += underlineText;
+    } else {
+      // Обычный текст
+      currentLine += part;
     }
-    
-    currentX += ctx.measureText(formattedText).width;
-    lastIndex = formatRegex.lastIndex;
+  });
+  
+  // Рендерим последнюю строку если есть
+  if (currentLine) {
+    ctx.fillText(currentLine, x, currentY);
+    currentY += 90;
   }
   
-  // Рендерим оставшийся обычный текст
-  if (lastIndex < text.length) {
-    const remainingText = text.substring(lastIndex);
-    ctx.fillText(remainingText, currentX, y);
-  }
+  return Math.ceil((currentY - y) / 90);
 }
 
 function parseMarkdownToSlides(text) {
@@ -443,7 +337,7 @@ function renderTextSlide(ctx, slide, contentY, contentWidth) {
     y += CONFIG.SPACING.H2_TO_P; // 80px
   }
 
-  // Основной текст с форматированием и МАЛЕНЬКИМИ отступами между параграфами
+  // Основной текст с поддержкой подчеркивания
   if (slide.text) {
     const textStyle = getFontStyle(CONFIG.FONTS.TEXT);
     ctx.font = textStyle.fontCSS;
@@ -456,18 +350,34 @@ function renderTextSlide(ctx, slide, contentY, contentWidth) {
       
       if (line.trim().startsWith('•')) {
         const itemText = line.replace(/^•\s*/, '');
-        // Рендерим с форматированием
-        renderFormattedText(ctx, '→ ' + itemText, CONFIG.CANVAS.PADDING, y, contentWidth, textStyle);
-        y += textStyle.lineHeight;
+        // Рендерим с подчеркиванием если есть
+        if (itemText.includes('__')) {
+          renderTextWithUnderline(ctx, '→ ' + itemText, CONFIG.CANVAS.PADDING, y, contentWidth);
+          y += textStyle.lineHeight;
+        } else {
+          const wrappedLines = wrapText(ctx, '→ ' + itemText, contentWidth);
+          wrappedLines.forEach(wrappedLine => {
+            ctx.fillText(wrappedLine, CONFIG.CANVAS.PADDING, y);
+            y += textStyle.lineHeight;
+          });
+        }
         
         // МАЛЕНЬКИЙ отступ между пунктами списка
         if (!isLastLine) {
           y += CONFIG.SPACING.P_TO_P; // 24px - внутри одного блока
         }
       } else if (line.trim()) {
-        // Рендерим параграф с форматированием
-        const lineCount = renderFormattedText(ctx, line.trim(), CONFIG.CANVAS.PADDING, y, contentWidth, textStyle);
-        y += textStyle.lineHeight * (lineCount.length || 1);
+        // Рендерим параграф с подчеркиванием если есть
+        if (line.includes('__')) {
+          renderTextWithUnderline(ctx, line.trim(), CONFIG.CANVAS.PADDING, y, contentWidth);
+          y += textStyle.lineHeight;
+        } else {
+          const wrappedLines = wrapText(ctx, line.trim(), contentWidth);
+          wrappedLines.forEach(wrappedLine => {
+            ctx.fillText(wrappedLine, CONFIG.CANVAS.PADDING, y);
+            y += textStyle.lineHeight;
+          });
+        }
         
         // МАЛЕНЬКИЙ отступ между параграфами
         if (!isLastLine) {
