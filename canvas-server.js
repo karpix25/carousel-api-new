@@ -13,17 +13,18 @@ const CONFIG = {
     WIDTH: 1600,
     HEIGHT: 2000,
     PADDING: 150,
-    BORDER_RADIUS: 64
+    BORDER_RADIUS: 64,
+    CONTENT_START_Y: 450 // Контент начинается с 450px от верха
   },
   FONTS: {
-    TITLE_INTRO: 'bold 128px Arial',
-    SUBTITLE_INTRO: '64px Arial',
-    TITLE_TEXT_WITH_CONTENT: 'bold 96px Arial',
-    TITLE_TEXT_ONLY: 'bold 136px Arial',
-    TEXT: '56px Arial',
-    QUOTE_LARGE: 'bold 96px Arial',
-    QUOTE_SMALL: 'bold 64px Arial',
-    HEADER_FOOTER: '40px Arial'
+    TITLE_INTRO: { size: 128, weight: 'bold', lineHeightRatio: 1.1 },
+    SUBTITLE_INTRO: { size: 64, weight: 'normal', lineHeightRatio: 1.25 },
+    TITLE_TEXT_WITH_CONTENT: { size: 96, weight: 'bold', lineHeightRatio: 1.25 },
+    TITLE_TEXT_ONLY: { size: 136, weight: 'bold', lineHeightRatio: 1.2 },
+    TEXT: { size: 56, weight: 'normal', lineHeightRatio: 1.3 },
+    QUOTE_LARGE: { size: 96, weight: 'bold', lineHeightRatio: 1.2 },
+    QUOTE_SMALL: { size: 64, weight: 'bold', lineHeightRatio: 1.3 },
+    HEADER_FOOTER: { size: 40, weight: 'normal', lineHeightRatio: 1.4 }
   },
   COLORS: {
     DEFAULT_BG: '#ffffff',
@@ -31,6 +32,13 @@ const CONFIG = {
     ACCENT_FALLBACK: '#6366F1'
   }
 };
+
+// Функция для получения CSS шрифта и line-height
+function getFontStyle(fontConfig) {
+  const fontCSS = `${fontConfig.weight} ${fontConfig.size}px Arial`;
+  const lineHeight = Math.round(fontConfig.size * fontConfig.lineHeightRatio);
+  return { fontCSS, lineHeight };
+}
 
 // ТОЧНО ваша функция + ТОЛЬКО висячие предлоги
 function wrapText(ctx, text, maxWidth) {
@@ -177,7 +185,8 @@ function renderSlideToCanvas(slide, slideNumber, totalSlides, settings) {
   ctx.fillStyle = textColor;
   
   // Header - отступ 220px сверху
-  ctx.font = CONFIG.FONTS.HEADER_FOOTER;
+  const headerFooter = getFontStyle(CONFIG.FONTS.HEADER_FOOTER);
+  ctx.font = headerFooter.fontCSS;
   ctx.globalAlpha = 0.7;
   ctx.textAlign = 'left';
   ctx.fillText(authorUsername, CONFIG.CANVAS.PADDING, 220);
@@ -185,9 +194,9 @@ function renderSlideToCanvas(slide, slideNumber, totalSlides, settings) {
   ctx.fillText(`${slideNumber}/${totalSlides}`, CONFIG.CANVAS.WIDTH - CONFIG.CANVAS.PADDING, 220);
   ctx.globalAlpha = 1;
 
-  // Content area
-  const contentY = 300;
-  const contentHeight = 1400;
+  // Content area - начинается с 450px от верха
+  const contentY = CONFIG.CANVAS.CONTENT_START_Y;
+  const contentHeight = CONFIG.CANVAS.HEIGHT - contentY - 220; // Учитываем footer отступ
   const contentWidth = CONFIG.CANVAS.WIDTH - (CONFIG.CANVAS.PADDING * 2);
   
   if (slide.type === 'intro') {
@@ -199,7 +208,7 @@ function renderSlideToCanvas(slide, slideNumber, totalSlides, settings) {
   }
 
   // Footer - отступ 220px снизу
-  ctx.font = CONFIG.FONTS.HEADER_FOOTER;
+  ctx.font = headerFooter.fontCSS;
   ctx.globalAlpha = 0.7;
   ctx.textAlign = 'left';
   ctx.fillText(authorFullName, CONFIG.CANVAS.PADDING, CONFIG.CANVAS.HEIGHT - 220);
@@ -215,25 +224,27 @@ function renderSlideToCanvas(slide, slideNumber, totalSlides, settings) {
 function renderIntroSlide(ctx, slide, contentY, contentHeight, contentWidth) {
   ctx.textAlign = 'center';
   
-  // Заголовок
-  ctx.font = CONFIG.FONTS.TITLE_INTRO;
+  // Заголовок с responsive line-height
+  const titleStyle = getFontStyle(CONFIG.FONTS.TITLE_INTRO);
+  ctx.font = titleStyle.fontCSS;
   const titleLines = wrapText(ctx, slide.title || '', contentWidth);
-  let y = contentY + (contentHeight - titleLines.length * 140 - (slide.text ? 120 : 0)) / 2;
+  let y = contentY + (contentHeight - titleLines.length * titleStyle.lineHeight - (slide.text ? titleStyle.lineHeight : 0)) / 2;
   
   titleLines.forEach(line => {
     ctx.fillText(line, CONFIG.CANVAS.WIDTH / 2, y);
-    y += 140;
+    y += titleStyle.lineHeight;
   });
 
-  // Подзаголовок
+  // Подзаголовок с responsive line-height
   if (slide.text) {
-    ctx.font = CONFIG.FONTS.SUBTITLE_INTRO;
+    const subtitleStyle = getFontStyle(CONFIG.FONTS.SUBTITLE_INTRO);
+    ctx.font = subtitleStyle.fontCSS;
     ctx.globalAlpha = 0.9;
-    y += 64;
+    y += Math.round(titleStyle.lineHeight * 0.5); // Отступ между заголовком и подзаголовком
     const subtitleLines = wrapText(ctx, slide.text, contentWidth);
     subtitleLines.forEach(line => {
       ctx.fillText(line, CONFIG.CANVAS.WIDTH / 2, y);
-      y += 80;
+      y += subtitleStyle.lineHeight;
     });
     ctx.globalAlpha = 1;
   }
@@ -242,24 +253,28 @@ function renderIntroSlide(ctx, slide, contentY, contentHeight, contentWidth) {
 function renderTextSlide(ctx, slide, contentY, contentWidth) {
   let y = contentY;
   
-  // Заголовок
+  // Заголовок с responsive line-height
   if (slide.title) {
     const hasText = slide.text && slide.text.trim();
-    ctx.font = hasText ? CONFIG.FONTS.TITLE_TEXT_WITH_CONTENT : CONFIG.FONTS.TITLE_TEXT_ONLY;
+    const titleStyle = getFontStyle(hasText ? CONFIG.FONTS.TITLE_TEXT_WITH_CONTENT : CONFIG.FONTS.TITLE_TEXT_ONLY);
+    ctx.font = titleStyle.fontCSS;
     ctx.textAlign = 'left';
     
     const titleLines = wrapText(ctx, slide.title, contentWidth);
     titleLines.forEach(line => {
       ctx.fillText(line, CONFIG.CANVAS.PADDING, y);
-      y += hasText ? 120 : 160;
+      y += titleStyle.lineHeight;
     });
     
-    if (hasText) y += 64;
+    if (hasText) {
+      y += Math.round(titleStyle.lineHeight * 0.5); // Отступ после заголовка
+    }
   }
 
-  // Текст - ТОЧНО как в оригинале
+  // Текст с responsive line-height
   if (slide.text) {
-    ctx.font = CONFIG.FONTS.TEXT;
+    const textStyle = getFontStyle(CONFIG.FONTS.TEXT);
+    ctx.font = textStyle.fontCSS;
     ctx.textAlign = 'left';
     
     const textLines = slide.text.split('\n');
@@ -269,16 +284,16 @@ function renderTextSlide(ctx, slide, contentY, contentWidth) {
         const wrappedLines = wrapText(ctx, '• ' + itemText, contentWidth);
         wrappedLines.forEach(wrappedLine => {
           ctx.fillText(wrappedLine, CONFIG.CANVAS.PADDING, y);
-          y += 72;
+          y += textStyle.lineHeight;
         });
       } else if (line.trim()) {
         const wrappedLines = wrapText(ctx, line.trim(), contentWidth);
         wrappedLines.forEach(wrappedLine => {
           ctx.fillText(wrappedLine, CONFIG.CANVAS.PADDING, y);
-          y += 72;
+          y += textStyle.lineHeight;
         });
       } else {
-        y += 32;
+        y += Math.round(textStyle.lineHeight * 0.5); // Отступ между параграфами
       }
     });
   }
@@ -288,15 +303,15 @@ function renderQuoteSlide(ctx, slide, contentY, contentHeight, contentWidth) {
   ctx.textAlign = 'center';
   
   const isSmall = slide.size === 'small';
-  ctx.font = isSmall ? CONFIG.FONTS.QUOTE_SMALL : CONFIG.FONTS.QUOTE_LARGE;
+  const quoteStyle = getFontStyle(isSmall ? CONFIG.FONTS.QUOTE_SMALL : CONFIG.FONTS.QUOTE_LARGE);
+  ctx.font = quoteStyle.fontCSS;
   
   const quoteLines = wrapText(ctx, slide.text || '', contentWidth);
-  const lineHeight = isSmall ? 84 : 120;
-  let y = contentY + (contentHeight - quoteLines.length * lineHeight) / 2;
+  let y = contentY + (contentHeight - quoteLines.length * quoteStyle.lineHeight) / 2;
   
   quoteLines.forEach(line => {
     ctx.fillText(line, CONFIG.CANVAS.WIDTH / 2, y);
-    y += lineHeight;
+    y += quoteStyle.lineHeight;
   });
 }
 
