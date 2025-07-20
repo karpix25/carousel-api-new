@@ -16,7 +16,7 @@ const CONFIG = {
     BORDER_RADIUS: 64,
     HEADER_FOOTER_PADDING: 192, // 48px × 4 = 192px (верх/низ)
     CONTENT_GAP: 144, // 36px × 4 = 144px (gap между header и content)
-    CONTENT_START_Y: 336 // 192px + 144px = 336px (header + gap)
+    CONTENT_START_Y: 420 // ИСПРАВЛЕНО: возвращаем 420px от верха
   },
   FONTS: {
     TITLE_INTRO: { size: 128, weight: 'bold', lineHeightRatio: 1.1 },
@@ -29,8 +29,8 @@ const CONFIG = {
     HEADER_FOOTER: { size: 48, weight: 'normal', lineHeightRatio: 1.4 } // 12px × 4 = 48px
   },
   SPACING: {
-    H2_TO_P: 80, // 20px × 4 = 80px (margin-bottom h2)
-    P_TO_P: 64   // 16px × 4 = 64px (margin-bottom p)
+    H2_TO_P: 80, // 20px × 4 = 80px (margin-bottom h2) - БОЛЬШОЙ отступ между блоками
+    P_TO_P: 24   // ИСПРАВЛЕНО: 6px × 4 = 24px - МАЛЕНЬКИЙ отступ внутри блока
   },
   COLORS: {
     DEFAULT_BG: '#ffffff',
@@ -228,25 +228,25 @@ function renderSlideToCanvas(slide, slideNumber, totalSlides, settings) {
 }
 
 function renderIntroSlide(ctx, slide, contentY, contentHeight, contentWidth) {
-  // Заголовок h1 - начинается с правильного отступа по левому краю
+  // Заголовок h1 - начинается с 420px по левому краю
   const titleStyle = getFontStyle(CONFIG.FONTS.TITLE_INTRO);
   ctx.font = titleStyle.fontCSS;
   ctx.textAlign = 'left';
   const titleLines = wrapText(ctx, slide.title || '', contentWidth);
-  let y = contentY; // Начинаем с 336px
+  let y = contentY; // Начинаем с 420px
   
   titleLines.forEach(line => {
     ctx.fillText(line, CONFIG.CANVAS.PADDING, y);
     y += titleStyle.lineHeight;
   });
 
-  // Подзаголовок p - отступ по веб-стандартам
+  // Подзаголовок p - БОЛЬШОЙ отступ как между блоками
   if (slide.text) {
     const subtitleStyle = getFontStyle(CONFIG.FONTS.SUBTITLE_INTRO);
     ctx.font = subtitleStyle.fontCSS;
     ctx.textAlign = 'left';
     ctx.globalAlpha = 0.9;
-    y += CONFIG.SPACING.H2_TO_P; // 80px отступ как в веб-версии
+    y += CONFIG.SPACING.H2_TO_P; // 80px отступ между блоками
     const subtitleLines = wrapText(ctx, slide.text, contentWidth);
     subtitleLines.forEach(line => {
       ctx.fillText(line, CONFIG.CANVAS.PADDING, y);
@@ -257,9 +257,9 @@ function renderIntroSlide(ctx, slide, contentY, contentHeight, contentWidth) {
 }
 
 function renderTextSlide(ctx, slide, contentY, contentWidth) {
-  let y = contentY; // Начинаем с 336px
+  let y = contentY; // Начинаем с 420px
   
-  // Заголовок h2 с margin-bottom
+  // Заголовок h2 с правильным margin-bottom
   if (slide.title) {
     const titleStyle = getFontStyle(CONFIG.FONTS.TITLE_TEXT_WITH_CONTENT);
     ctx.font = titleStyle.fontCSS;
@@ -271,17 +271,17 @@ function renderTextSlide(ctx, slide, contentY, contentWidth) {
       y += titleStyle.lineHeight;
     });
     
-    // h2 всегда имеет margin-bottom: 20px × 4 = 80px
-    y += CONFIG.SPACING.H2_TO_P; // 80px margin-bottom
+    // h2 имеет БОЛЬШОЙ margin-bottom: 80px (отступ между блоками)
+    y += CONFIG.SPACING.H2_TO_P; // 80px
   }
 
-  // Основной текст с правильными margin-bottom
+  // Основной текст с МАЛЕНЬКИМИ отступами между параграфами
   if (slide.text) {
     const textStyle = getFontStyle(CONFIG.FONTS.TEXT);
     ctx.font = textStyle.fontCSS;
     ctx.textAlign = 'left';
     
-    const textLines = slide.text.split('\n').filter(line => line.trim()); // Убираем пустые строки
+    const textLines = slide.text.split('\n').filter(line => line.trim());
     
     textLines.forEach((line, lineIndex) => {
       const isLastLine = lineIndex === textLines.length - 1;
@@ -289,14 +289,14 @@ function renderTextSlide(ctx, slide, contentY, contentWidth) {
       if (line.trim().startsWith('•')) {
         const itemText = line.replace(/^•\s*/, '');
         const wrappedLines = wrapText(ctx, '→ ' + itemText, contentWidth);
-        wrappedLines.forEach((wrappedLine, wrappedIndex) => {
+        wrappedLines.forEach(wrappedLine => {
           ctx.fillText(wrappedLine, CONFIG.CANVAS.PADDING, y);
           y += textStyle.lineHeight;
         });
         
-        // Каждый li имеет margin-bottom: 16px × 4 = 64px (кроме последнего)
+        // ИСПРАВЛЕНО: МАЛЕНЬКИЙ отступ между пунктами списка (24px вместо 64px)
         if (!isLastLine) {
-          y += CONFIG.SPACING.P_TO_P; // 64px margin-bottom
+          y += CONFIG.SPACING.P_TO_P; // 24px - внутри одного блока
         }
       } else if (line.trim()) {
         const wrappedLines = wrapText(ctx, line.trim(), contentWidth);
@@ -305,9 +305,9 @@ function renderTextSlide(ctx, slide, contentY, contentWidth) {
           y += textStyle.lineHeight;
         });
         
-        // Каждый p имеет margin-bottom: 16px × 4 = 64px (кроме последнего)
+        // ИСПРАВЛЕНО: МАЛЕНЬКИЙ отступ между параграфами (24px вместо 64px)
         if (!isLastLine) {
-          y += CONFIG.SPACING.P_TO_P; // 64px margin-bottom
+          y += CONFIG.SPACING.P_TO_P; // 24px - внутри одного блока
         }
       }
     });
