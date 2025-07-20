@@ -298,17 +298,15 @@ async function renderSlideToCanvas(slide, slideNumber, totalSlides, settings) {
     brandColor = CONFIG.COLORS.ACCENT_FALLBACK,
     authorUsername = '@username',
     authorFullName = 'Your Name',
-    avatarUrl = null // Новый параметр для аватарки
+    avatarUrl = null, // Новый параметр для аватарки
+    preloadedAvatar = null // Уже загруженная аватарка
   } = settings;
 
   const canvas = createCanvas(CONFIG.CANVAS.WIDTH, CONFIG.CANVAS.HEIGHT);
   const ctx = canvas.getContext('2d');
   
-  // Загружаем аватарку если указана
-  let avatarImage = null;
-  if (avatarUrl) {
-    avatarImage = await loadAvatarImage(avatarUrl); // Используем правильную функцию
-  }
+  // Используем предзагруженную аватарку
+  let avatarImage = preloadedAvatar;
   
   // Цвета
   const isAccent = slide.color === 'accent';
@@ -498,6 +496,60 @@ function renderQuoteSlide(ctx, slide, contentY, contentHeight, contentWidth) {
   });
 }
 
+// Функция для рендеринга финального слайда с иконкой
+async function renderFinalSlide(ctx, slide, contentY, contentHeight, contentWidth, textColor) {
+  const titleStyle = getFontStyle(CONFIG.FONTS.TITLE_TEXT_WITH_CONTENT);
+  const textStyle = getFontStyle(CONFIG.FONTS.TEXT);
+  
+  // Центрируем весь контент вертикально
+  const iconSize = 64;
+  const totalContentHeight = titleStyle.lineHeight + CONFIG.SPACING.H2_TO_P + 
+                            (slide.text.split('\n').length * textStyle.lineHeight) + 32 + iconSize;
+  
+  let y = contentY + (contentHeight - totalContentHeight) / 2;
+  
+  // Рендерим иконку сверху по центру
+  if (slide.icon) {
+    const iconX = (CONFIG.CANVAS.WIDTH - iconSize) / 2;
+    await renderSVGIcon(ctx, slide.icon, iconX, y, iconSize, textColor);
+    y += iconSize + 32; // Отступ после иконки
+  }
+  
+  // Заголовок по центру
+  if (slide.title) {
+    ctx.font = titleStyle.fontCSS;
+    ctx.textAlign = 'center';
+    const titleLines = wrapText(ctx, slide.title, contentWidth);
+    titleLines.forEach(line => {
+      ctx.fillText(line, CONFIG.CANVAS.WIDTH / 2, y);
+      y += titleStyle.lineHeight;
+    });
+    y += CONFIG.SPACING.H2_TO_P; // Отступ после заголовка
+  }
+  
+  // Основной текст по центру
+  if (slide.text) {
+    ctx.font = textStyle.fontCSS;
+    ctx.textAlign = 'center';
+    const textLines = slide.text.split('\n').filter(line => line.trim());
+    
+    textLines.forEach((line, lineIndex) => {
+      const isLastLine = lineIndex === textLines.length - 1;
+      const wrappedLines = wrapText(ctx, line.trim(), contentWidth);
+      
+      wrappedLines.forEach(wrappedLine => {
+        ctx.fillText(wrappedLine, CONFIG.CANVAS.WIDTH / 2, y);
+        y += textStyle.lineHeight;
+      });
+      
+      // Отступ между параграфами (кроме последнего)
+      if (!isLastLine) {
+        y += CONFIG.SPACING.P_TO_P;
+      }
+    });
+  }
+}
+
 // API Routes
 app.get('/health', (req, res) => {
   res.json({ 
@@ -524,6 +576,12 @@ app.post('/api/generate-carousel', async (req, res) => {
       console.log('🖼️ Используется аватарка:', settings.avatarUrl);
     }
 
+    // ЗАГРУЖАЕМ АВАТАРКУ ОДИН РАЗ для всех слайдов
+    let avatarImage = null;
+    if (settings.avatarUrl) {
+      avatarImage = await loadAvatarImage(settings.avatarUrl);
+    }
+
     // Парсинг
     const slides = parseMarkdownToSlides(text);
     
@@ -545,10 +603,11 @@ app.post('/api/generate-carousel', async (req, res) => {
 
     console.log(`📝 Создано слайдов: ${slides.length}`);
 
-    // Рендеринг с поддержкой аватарки
+    // Рендеринг с переиспользованием аватарки
     const images = [];
     for (let i = 0; i < slides.length; i++) {
-      const canvas = await renderSlideToCanvas(slides[i], i + 1, slides.length, settings);
+      // Передаем уже загруженную аватарку
+      const canvas = await renderSlideToCanvas(slides[i], i + 1, slides.length, {...settings, preloadedAvatar: avatarImage});
       const base64 = canvas.toBuffer('image/png').toString('base64');
       images.push(base64);
     }
