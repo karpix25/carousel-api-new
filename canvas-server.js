@@ -314,7 +314,7 @@ async function renderSlideToCanvas(slide, slideNumber, totalSlides, settings) {
   ctx.font = headerFooter.fontCSS;
   ctx.globalAlpha = 0.7;
   
-  const avatarSize = 48; // Размер аватарки
+  const avatarSize = 80; // Размер аватарки
   const avatarPadding = 16; // Отступ между аватаркой и текстом
   
   if (avatarImage) {
