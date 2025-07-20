@@ -279,7 +279,59 @@ function parseMarkdownToSlides(text) {
   return slides;
 }
 
-async function renderSlideToCanvas(slide, slideNumber, totalSlides, settings) {
+// Функция для добавления финального слайда
+function addFinalSlide(slides, settings) {
+  const finalSlideConfig = settings.finalSlide;
+  
+  if (!finalSlideConfig || !finalSlideConfig.enabled) {
+    return slides; // Если не включен, возвращаем как есть
+  }
+  
+  // Готовые шаблоны
+  const templates = {
+    cta: {
+      title: 'Подписывайтесь!',
+      text: 'Ставьте лайк если полезно\n\nБольше контента в профиле',
+      color: 'accent'
+    },
+    contact: {
+      title: 'Связаться со мной:',
+      text: 'email@example.com\n\nTelegram: @username\n\nwebsite.com',
+      color: 'default'
+    },
+    brand: {
+      title: 'Спасибо за внимание!',
+      text: 'Помогаю бизнесу расти\n\nКонсультации и стратегии',
+      color: 'accent'
+    }
+  };
+  
+  let finalSlide;
+  
+  if (finalSlideConfig.type && templates[finalSlideConfig.type]) {
+    // Используем готовый шаблон
+    finalSlide = {
+      type: 'text',
+      ...templates[finalSlideConfig.type],
+      // Переопределяем если указаны кастомные значения
+      ...(finalSlideConfig.title && { title: finalSlideConfig.title }),
+      ...(finalSlideConfig.text && { text: finalSlideConfig.text }),
+      ...(finalSlideConfig.color && { color: finalSlideConfig.color })
+    };
+  } else {
+    // Кастомный слайд
+    finalSlide = {
+      type: 'text',
+      title: finalSlideConfig.title || 'Спасибо за внимание!',
+      text: finalSlideConfig.text || 'Больше контента в профиле',
+      color: finalSlideConfig.color || 'accent'
+    };
+  }
+  
+  return [...slides, finalSlide];
+}
+
+async function renderSlideToCanvas(slide, slideNumber, totalSlides, settings, avatarImage = null) {
   const {
     brandColor = CONFIG.COLORS.ACCENT_FALLBACK,
     authorUsername = '@username',
@@ -290,11 +342,8 @@ async function renderSlideToCanvas(slide, slideNumber, totalSlides, settings) {
   const canvas = createCanvas(CONFIG.CANVAS.WIDTH, CONFIG.CANVAS.HEIGHT);
   const ctx = canvas.getContext('2d');
   
-  // Загружаем аватарку если указана
-  let avatarImage = null;
-  if (avatarUrl) {
-    avatarImage = await loadAvatarImage(avatarUrl); // Используем правильную функцию
-  }
+  // ОПТИМИЗАЦИЯ: Используем переданную аватарку вместо загрузки каждый раз
+  // avatarImage уже загружена один раз в main функции
   
   // Цвета
   const isAccent = slide.color === 'accent';
@@ -314,13 +363,13 @@ async function renderSlideToCanvas(slide, slideNumber, totalSlides, settings) {
   ctx.font = headerFooter.fontCSS;
   ctx.globalAlpha = 0.7;
   
-  const avatarSize = 40; // ИЗМЕНЕНО: уменьшил с 48 до 40px
-  const avatarPadding = 12; // ИЗМЕНЕНО: уменьшил отступ с 16 до 12px
+  const avatarSize = 40;
+  const avatarPadding = 12;
   
   if (avatarImage) {
     // Вычисляем позицию для центрирования аватарки с текстом
     const textBaseline = CONFIG.CANVAS.HEADER_FOOTER_PADDING;
-    const avatarY = textBaseline - avatarSize/2 - 6; // Центрируем относительно baseline текста
+    const avatarY = textBaseline - avatarSize/2 - 12; // Поднято выше
     
     // Рендерим аватарку
     renderAvatar(ctx, avatarImage, CONFIG.CANVAS.PADDING, avatarY, avatarSize);
@@ -503,13 +552,16 @@ app.post('/api/generate-carousel', async (req, res) => {
       return res.status(400).json({ error: 'Требуется текст' });
     }
 
-    // Логируем настройки для отладки
+    // ОПТИМИЗАЦИЯ: Загружаем аватарку ОДИН раз в начале
+    let avatarImage = null;
     if (settings.avatarUrl) {
-      console.log('🖼️ Используется аватарка:', settings.avatarUrl);
+      console.log('🖼️ Загружаем аватарку один раз для всех слайдов...');
+      avatarImage = await loadAvatarImage(settings.avatarUrl);
     }
 
-    // Парсинг
-    const slides = parseMarkdownToSlides(text);
+    // Парсинг и добавление финального слайда
+    let slides = parseMarkdownToSlides(text);
+    slides = addFinalSlide(slides, settings); // Добавляем финальный слайд
     
     if (slides.length === 0) {
       slides.push({
@@ -520,12 +572,13 @@ app.post('/api/generate-carousel', async (req, res) => {
       });
     }
 
-    console.log(`📝 Создано слайдов: ${slides.length}`);
+    console.log(`📝 Создано слайдов: ${slides.length} ${settings.finalSlide?.enabled ? '(включая финальный)' : ''}`);
 
-    // Рендеринг с поддержкой аватарки
+    // Рендеринг с переиспользованием аватарки
     const images = [];
     for (let i = 0; i < slides.length; i++) {
-      const canvas = await renderSlideToCanvas(slides[i], i + 1, slides.length, settings);
+      // Передаем уже загруженную аватарку
+      const canvas = await renderSlideToCanvas(slides[i], i + 1, slides.length, settings, avatarImage);
       const base64 = canvas.toBuffer('image/png').toString('base64');
       images.push(base64);
     }
@@ -541,7 +594,7 @@ app.post('/api/generate-carousel', async (req, res) => {
         generatedAt: new Date().toISOString(),
         processingTime,
         settings,
-        engine: 'canvas-api-production-with-avatar'
+        engine: 'canvas-api-production-with-final-slide'
       }
     });
 
