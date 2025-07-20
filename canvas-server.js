@@ -17,7 +17,7 @@ const CONFIG = {
     BORDER_RADIUS: 64,
     HEADER_FOOTER_PADDING: 192,
     CONTENT_GAP: 144,
-    CONTENT_START_Y: 420
+    CONTENT_START_Y: 500
   },
   FONTS: {
     TITLE_INTRO: { size: 128, weight: 'bold', lineHeightRatio: 1.1 },
