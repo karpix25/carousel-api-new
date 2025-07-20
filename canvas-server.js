@@ -2,7 +2,7 @@ console.log('🎯 ФИНАЛЬНАЯ ПРОДАКШН ВЕРСИЯ - Canvas API'
 
 const express = require('express');
 const { marked } = require('marked');
-const { createCanvas, loadImage } = require('canvas'); // ИСПРАВЛЕНО: импортируем loadImage из canvas
+const { createCanvas, loadImage } = require('canvas');
 
 const app = express();
 app.use(express.json({ limit: '10mb' }));
@@ -126,7 +126,7 @@ function renderCanvasIcon(ctx, iconName, x, y, size, color = '#000000') {
 async function loadAvatarImage(url) {
   try {
     console.log('🖼️ Загружаем аватарку:', url);
-    const image = await loadImage(url); // Используем loadImage из canvas
+    const image = await loadImage(url);
     console.log('✅ Аватарка загружена успешно');
     return image;
   } catch (error) {
@@ -147,20 +147,6 @@ function createFinalSlide(settings) {
     color: finalSlide.color || 'accent',
     icon: finalSlide.icon || 'share'
   };
-}
-
-// Функция для рендеринга Canvas иконки (без SVG)
-function renderCanvasIcon(ctx, iconName, x, y, size, color = '#000000') {
-  if (!CANVAS_ICONS[iconName]) {
-    console.warn(`Иконка ${iconName} не найдена`);
-    return;
-  }
-  
-  try {
-    CANVAS_ICONS[iconName](ctx, x, y, size, color);
-  } catch (error) {
-    console.warn('Ошибка рендеринга иконки:', error);
-  }
 }
 
 // Функция для получения CSS шрифта и line-height
@@ -185,26 +171,6 @@ function renderAvatar(ctx, avatarImage, x, y, size) {
   ctx.drawImage(avatarImage, x, y, size, size);
   
   ctx.restore();
-}
-
-// Функция для рендеринга SVG иконки
-async function renderSVGIcon(ctx, iconName, x, y, size, color = '#000000') {
-  if (!ICONS[iconName]) {
-    console.warn(`Иконка ${iconName} не найдена`);
-    return;
-  }
-  
-  try {
-    // Создаем SVG с заданным цветом
-    const svgString = ICONS[iconName].replace('<path d=', `<path fill="${color}" d=`);
-    const svgData = `data:image/svg+xml;base64,${Buffer.from(svgString).toString('base64')}`;
-    
-    // Загружаем и рендерим
-    const svgImage = await loadImage(svgData);
-    ctx.drawImage(svgImage, x, y, size, size);
-  } catch (error) {
-    console.warn('Ошибка рендеринга SVG:', error);
-  }
 }
 
 // ТОЧНО ваша функция + ТОЛЬКО висячие предлоги + обработка спецсимволов
@@ -415,8 +381,8 @@ async function renderSlideToCanvas(slide, slideNumber, totalSlides, settings) {
     brandColor = CONFIG.COLORS.ACCENT_FALLBACK,
     authorUsername = '@username',
     authorFullName = 'Your Name',
-    avatarUrl = null, // Новый параметр для аватарки
-    preloadedAvatar = null // Уже загруженная аватарка
+    avatarUrl = null,
+    preloadedAvatar = null
   } = settings;
 
   const canvas = createCanvas(CONFIG.CANVAS.WIDTH, CONFIG.CANVAS.HEIGHT);
@@ -443,13 +409,13 @@ async function renderSlideToCanvas(slide, slideNumber, totalSlides, settings) {
   ctx.font = headerFooter.fontCSS;
   ctx.globalAlpha = 0.7;
   
-  const avatarSize = 100; // ИЗМЕНЕНО: уменьшил с 48 до 40px
-  const avatarPadding = 16; // ИЗМЕНЕНО: уменьшил отступ с 16 до 12px
+  const avatarSize = 100;
+  const avatarPadding = 16;
   
   if (avatarImage) {
     // Вычисляем позицию для центрирования аватарки с текстом
     const textBaseline = CONFIG.CANVAS.HEADER_FOOTER_PADDING;
-    const avatarY = textBaseline - avatarSize/2 - 9; // Центрируем относительно baseline текста
+    const avatarY = textBaseline - avatarSize/2 - 9;
     
     // Рендерим аватарку
     renderAvatar(ctx, avatarImage, CONFIG.CANVAS.PADDING, avatarY, avatarSize);
@@ -468,7 +434,7 @@ async function renderSlideToCanvas(slide, slideNumber, totalSlides, settings) {
   ctx.fillText(`${slideNumber}/${totalSlides}`, CONFIG.CANVAS.WIDTH - CONFIG.CANVAS.PADDING, CONFIG.CANVAS.HEADER_FOOTER_PADDING);
   ctx.globalAlpha = 1;
 
-  // Content area - начинается с правильного отступа
+  // Content area
   const contentY = CONFIG.CANVAS.CONTENT_START_Y;
   const contentHeight = CONFIG.CANVAS.HEIGHT - contentY - CONFIG.CANVAS.HEADER_FOOTER_PADDING;
   const contentWidth = CONFIG.CANVAS.WIDTH - (CONFIG.CANVAS.PADDING * 2);
@@ -480,10 +446,10 @@ async function renderSlideToCanvas(slide, slideNumber, totalSlides, settings) {
   } else if (slide.type === 'quote') {
     renderQuoteSlide(ctx, slide, contentY, contentHeight, contentWidth);
   } else if (slide.type === 'final') {
-    renderFinalSlide(ctx, slide, contentY, contentHeight, contentWidth, textColor); // Убрали await
+    renderFinalSlide(ctx, slide, contentY, contentHeight, contentWidth, textColor);
   }
 
-  // Footer - отступ по формуле ×4 от веб-версии
+  // Footer
   ctx.font = headerFooter.fontCSS;
   ctx.globalAlpha = 0.7;
   ctx.textAlign = 'left';
@@ -613,8 +579,8 @@ function renderQuoteSlide(ctx, slide, contentY, contentHeight, contentWidth) {
   });
 }
 
-// Функция для рендеринга финального слайда с иконкой
-async function renderFinalSlide(ctx, slide, contentY, contentHeight, contentWidth, textColor) {
+// ИСПРАВЛЕНО: Функция для рендеринга финального слайда с Canvas иконкой
+function renderFinalSlide(ctx, slide, contentY, contentHeight, contentWidth, textColor) {
   const titleStyle = getFontStyle(CONFIG.FONTS.TITLE_TEXT_WITH_CONTENT);
   const textStyle = getFontStyle(CONFIG.FONTS.TEXT);
   
@@ -625,10 +591,10 @@ async function renderFinalSlide(ctx, slide, contentY, contentHeight, contentWidt
   
   let y = contentY + (contentHeight - totalContentHeight) / 2;
   
-  // Рендерим иконку сверху по центру
+  // ИСПРАВЛЕНО: Рендерим Canvas иконку сверху по центру
   if (slide.icon) {
     const iconX = (CONFIG.CANVAS.WIDTH - iconSize) / 2;
-    await renderSVGIcon(ctx, slide.icon, iconX, y, iconSize, textColor);
+    renderCanvasIcon(ctx, slide.icon, iconX, y, iconSize, textColor);
     y += iconSize + 32; // Отступ после иконки
   }
   
