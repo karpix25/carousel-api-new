@@ -257,11 +257,10 @@ function renderIntroSlide(ctx, slide, contentY, contentHeight, contentWidth) {
 }
 
 function renderTextSlide(ctx, slide, contentY, contentWidth) {
-  let y = contentY; // Начинаем с 336px (правильный отступ)
+  let y = contentY; // Начинаем с 336px
   
-  // Заголовок h2 - правильный размер шрифта
+  // Заголовок h2 с margin-bottom
   if (slide.title) {
-    const hasText = slide.text && slide.text.trim();
     const titleStyle = getFontStyle(CONFIG.FONTS.TITLE_TEXT_WITH_CONTENT);
     ctx.font = titleStyle.fontCSS;
     ctx.textAlign = 'left';
@@ -269,39 +268,46 @@ function renderTextSlide(ctx, slide, contentY, contentWidth) {
     const titleLines = wrapText(ctx, slide.title, contentWidth);
     titleLines.forEach(line => {
       ctx.fillText(line, CONFIG.CANVAS.PADDING, y);
-      y += titleStyle.lineHeight; // Правильно добавляем line-height для каждой строки
+      y += titleStyle.lineHeight;
     });
     
-    // ИСПРАВЛЕНО: отступ h2→p по веб-стандартам (20px × 4 = 80px)
-    if (hasText) {
-      y += CONFIG.SPACING.H2_TO_P; // 80px отступ
-    }
+    // h2 всегда имеет margin-bottom: 20px × 4 = 80px
+    y += CONFIG.SPACING.H2_TO_P; // 80px margin-bottom
   }
 
-  // Основной текст p - правильный размер и отступы
+  // Основной текст с правильными margin-bottom
   if (slide.text) {
     const textStyle = getFontStyle(CONFIG.FONTS.TEXT);
     ctx.font = textStyle.fontCSS;
     ctx.textAlign = 'left';
     
-    const textLines = slide.text.split('\n');
+    const textLines = slide.text.split('\n').filter(line => line.trim()); // Убираем пустые строки
+    
     textLines.forEach((line, lineIndex) => {
+      const isLastLine = lineIndex === textLines.length - 1;
+      
       if (line.trim().startsWith('•')) {
         const itemText = line.replace(/^•\s*/, '');
         const wrappedLines = wrapText(ctx, '→ ' + itemText, contentWidth);
-        wrappedLines.forEach(wrappedLine => {
+        wrappedLines.forEach((wrappedLine, wrappedIndex) => {
           ctx.fillText(wrappedLine, CONFIG.CANVAS.PADDING, y);
           y += textStyle.lineHeight;
         });
+        
+        // Каждый li имеет margin-bottom: 16px × 4 = 64px (кроме последнего)
+        if (!isLastLine) {
+          y += CONFIG.SPACING.P_TO_P; // 64px margin-bottom
+        }
       } else if (line.trim()) {
         const wrappedLines = wrapText(ctx, line.trim(), contentWidth);
         wrappedLines.forEach(wrappedLine => {
           ctx.fillText(wrappedLine, CONFIG.CANVAS.PADDING, y);
           y += textStyle.lineHeight;
         });
-        // Отступ между параграфами (кроме последнего)
-        if (lineIndex < textLines.length - 1 && textLines[lineIndex + 1].trim()) {
-          y += CONFIG.SPACING.P_TO_P; // 64px между параграфами
+        
+        // Каждый p имеет margin-bottom: 16px × 4 = 64px (кроме последнего)
+        if (!isLastLine) {
+          y += CONFIG.SPACING.P_TO_P; // 64px margin-bottom
         }
       }
     });
