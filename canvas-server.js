@@ -1,8 +1,8 @@
 /**
- * Canvas Carousel API (improved underline + wrapping)
+ * Canvas Carousel API (improved underline + wrapping + auto contrast)
  * CommonJS version
  */
-console.log('🎯 ФИНАЛЬНАЯ ПРОДАКШН ВЕРСИЯ - Canvas API (improved underline engine)');
+console.log('🎯 ФИНАЛЬНАЯ ПРОДАКШН ВЕРСИЯ - Canvas API (auto contrast engine)');
 
 const express = require('express');
 const { marked } = require('marked');
@@ -36,9 +36,81 @@ const CONFIG = {
   COLORS: {
     DEFAULT_BG: '#ffffff',
     DEFAULT_TEXT: '#000000',
-    ACCENT_FALLBACK: '#6366F1'
+    ACCENT_FALLBACK: '#6366F1',
+    LIGHT_TEXT: '#ffffff',
+    DARK_TEXT: '#000000'
   }
 };
+
+// ================== COLOR CONTRAST HELPERS ==================
+/**
+ * Конвертирует HEX цвет в RGB
+ */
+function hexToRgb(hex) {
+  // Убираем # если есть
+  hex = hex.replace('#', '');
+  
+  // Поддержка 3-символьного HEX (#fff → #ffffff)
+  if (hex.length === 3) {
+    hex = hex[0] + hex[0] + hex[1] + hex[1] + hex[2] + hex[2];
+  }
+  
+  const r = parseInt(hex.substr(0, 2), 16);
+  const g = parseInt(hex.substr(2, 2), 16);
+  const b = parseInt(hex.substr(4, 2), 16);
+  
+  return { r, g, b };
+}
+
+/**
+ * Вычисляет яркость цвета по формуле относительной яркости
+ * Использует коэффициенты восприятия человеческого глаза
+ */
+function getLuminance(r, g, b) {
+  // Нормализуем значения RGB к 0-1
+  const [rs, gs, bs] = [r, g, b].map(c => {
+    c = c / 255;
+    return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+  });
+  
+  // Формула относительной яркости
+  return 0.2126 * rs + 0.7152 * gs + 0.0722 * bs;
+}
+
+/**
+ * Определяет контрастный цвет текста для заданного фона
+ * Возвращает белый или черный цвет в зависимости от яркости фона
+ */
+function getContrastColor(backgroundColor) {
+  try {
+    const { r, g, b } = hexToRgb(backgroundColor);
+    const luminance = getLuminance(r, g, b);
+    
+    // Если яркость больше 0.5 → темный текст, иначе → светлый текст
+    return luminance > 0.5 ? CONFIG.COLORS.DARK_TEXT : CONFIG.COLORS.LIGHT_TEXT;
+  } catch (error) {
+    console.warn('Ошибка определения контраста для цвета:', backgroundColor);
+    // Fallback на черный текст
+    return CONFIG.COLORS.DARK_TEXT;
+  }
+}
+
+/**
+ * Определяет оптимальный цвет акцента для подчеркивания
+ * На светлых фонах возвращает brandColor, на темных - белый
+ */
+function getAccentColorForBackground(backgroundColor, brandColor) {
+  try {
+    const { r, g, b } = hexToRgb(backgroundColor);
+    const luminance = getLuminance(r, g, b);
+    
+    // На темных фонах акцент должен быть светлым
+    return luminance > 0.5 ? brandColor : CONFIG.COLORS.LIGHT_TEXT;
+  } catch (error) {
+    console.warn('Ошибка определения акцентного цвета:', backgroundColor);
+    return brandColor;
+  }
+}
 
 // ================== HELPERS ==================
 function getFontStyle(fontConfig) {
@@ -218,6 +290,7 @@ function renderRichText(ctx, rawText, x, startY, maxWidth, fontConf, baseColor, 
       const weight = run.bold ? 'bold' : 'normal';
       ctx.font = buildFont(weight, baseFontSize);
 
+      // УЛУЧШЕННАЯ ЛОГИКА: акцентный цвет только для __**текста**__ на белых слайдах
       const useAccent = run.underline && run.bold && !slideIsAccent;
       ctx.fillStyle = useAccent ? accentColor : baseColor;
 
@@ -497,7 +570,12 @@ async function renderSlideToCanvas(slide, slideNumber, totalSlides, settings, av
   // Background
   const isAccent = slide.color === 'accent';
   const bgColor = isAccent ? brandColor : CONFIG.COLORS.DEFAULT_BG;
-  const textColor = isAccent ? CONFIG.COLORS.DEFAULT_BG : CONFIG.COLORS.DEFAULT_TEXT;
+  
+  // 🎨 НОВАЯ ЛОГИКА: автоматический контраст
+  const textColor = isAccent ? getContrastColor(brandColor) : CONFIG.COLORS.DEFAULT_TEXT;
+  const accentColorForText = getAccentColorForBackground(CONFIG.COLORS.DEFAULT_BG, brandColor);
+
+  console.log(`🎨 Слайд ${slideNumber}: фон=${bgColor}, текст=${textColor}, акцент=${accentColorForText}`);
 
   ctx.fillStyle = bgColor;
   if (ctx.roundRect) {
@@ -540,7 +618,7 @@ async function renderSlideToCanvas(slide, slideNumber, totalSlides, settings, av
   if (slide.type === 'intro') {
     renderIntroSlide(ctx, slide, contentY, contentWidth);
   } else if (slide.type === 'text') {
-    renderTextSlide(ctx, slide, contentY, contentWidth, brandColor);
+    renderTextSlide(ctx, slide, contentY, contentWidth, accentColorForText);
   } else if (slide.type === 'quote') {
     renderQuoteSlide(ctx, slide, contentY, contentHeight, contentWidth);
   }
@@ -566,7 +644,7 @@ app.use(express.json({ limit: '10mb' }));
 app.get('/health', (req, res) => {
   res.json({
     status: 'production-ready',
-    engine: 'canvas-api-rich-text',
+    engine: 'canvas-api-auto-contrast',
     performance: 'optimized',
     memory: 'efficient'
   });
@@ -579,6 +657,9 @@ app.post('/api/generate-carousel', async (req, res) => {
     if (!text) {
       return res.status(400).json({ error: 'Требуется текст' });
     }
+
+    // Логирование входящего brandColor для дебага
+    console.log('🎨 Входящий brandColor:', settings.brandColor);
 
     // Аватарка (один раз)
     let avatarImage = null;
@@ -614,7 +695,7 @@ app.post('/api/generate-carousel', async (req, res) => {
         generatedAt: new Date().toISOString(),
         processingTime,
         settings,
-        engine: 'canvas-api-rich-text'
+        engine: 'canvas-api-auto-contrast'
       }
     });
   } catch (e) {
@@ -632,5 +713,5 @@ process.on('SIGTERM', () => {
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => {
   console.log(`🚀 PRODUCTION Canvas API на порту ${PORT}`);
-  console.log(`🎨 Улучшенный механизм переноса и подчёркивания готов.`);
+  console.log(`🎨 Автоматический контраст текста готов!`);
 });
