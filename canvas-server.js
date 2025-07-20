@@ -52,6 +52,20 @@ async function loadAvatarImage(url) {
   }
 }
 
+// Функция для создания финального слайда
+function createFinalSlide(settings) {
+  const finalSlide = settings.finalSlide;
+  if (!finalSlide || !finalSlide.enabled) return null;
+  
+  return {
+    type: 'final',
+    title: finalSlide.title || 'Подписывайтесь!',
+    text: finalSlide.text || 'Ставьте лайк если полезно\n\nБольше контента в профиле',
+    color: finalSlide.color || 'accent',
+    icon: finalSlide.icon || 'share'
+  };
+}
+
 // Функция для получения CSS шрифта и line-height
 function getFontStyle(fontConfig) {
   const fontCSS = `${fontConfig.weight} ${fontConfig.size}px Arial`;
@@ -314,13 +328,13 @@ async function renderSlideToCanvas(slide, slideNumber, totalSlides, settings) {
   ctx.font = headerFooter.fontCSS;
   ctx.globalAlpha = 0.7;
   
-  const avatarSize = 100; // ИЗМЕНЕНО: уменьшил с 48 до 40px
-  const avatarPadding = 16; // ИЗМЕНЕНО: уменьшил отступ с 16 до 12px
+  const avatarSize = 40; // ИЗМЕНЕНО: уменьшил с 48 до 40px
+  const avatarPadding = 12; // ИЗМЕНЕНО: уменьшил отступ с 16 до 12px
   
   if (avatarImage) {
     // Вычисляем позицию для центрирования аватарки с текстом
     const textBaseline = CONFIG.CANVAS.HEADER_FOOTER_PADDING;
-    const avatarY = textBaseline - avatarSize/2 - 9; // Центрируем относительно baseline текста
+    const avatarY = textBaseline - avatarSize/2 - 6; // Центрируем относительно baseline текста
     
     // Рендерим аватарку
     renderAvatar(ctx, avatarImage, CONFIG.CANVAS.PADDING, avatarY, avatarSize);
@@ -350,6 +364,8 @@ async function renderSlideToCanvas(slide, slideNumber, totalSlides, settings) {
     renderTextSlide(ctx, slide, contentY, contentWidth);
   } else if (slide.type === 'quote') {
     renderQuoteSlide(ctx, slide, contentY, contentHeight, contentWidth);
+  } else if (slide.type === 'final') {
+    await renderFinalSlide(ctx, slide, contentY, contentHeight, contentWidth, textColor);
   }
 
   // Footer - отступ по формуле ×4 от веб-версии
@@ -518,6 +534,13 @@ app.post('/api/generate-carousel', async (req, res) => {
         text: text.substring(0, 200),
         color: 'default'
       });
+    }
+
+    // Добавляем финальный слайд если нужно
+    const finalSlide = createFinalSlide(settings);
+    if (finalSlide) {
+      slides.push(finalSlide);
+      console.log('📄 Добавлен финальный слайд');
     }
 
     console.log(`📝 Создано слайдов: ${slides.length}`);
