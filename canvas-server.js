@@ -30,8 +30,8 @@ const CONFIG = {
     HEADER_FOOTER: { size: 48, weight: 'normal', lineHeightRatio: 1.4 }
   },
   SPACING: {
-    H2_TO_P: 80,   // 20px × 4 = 80px (margin-bottom h2)
-    P_TO_P: 64     // 16px × 4 = 64px (margin-bottom p) - ИСПРАВЛЕНО!
+    H2_TO_P: 80,
+    P_TO_P: 24
   },
   COLORS: {
     DEFAULT_BG: '#ffffff',
@@ -143,32 +143,7 @@ function renderAvatar(ctx, avatarImage, x, y, size) {
   ctx.restore();
 }
 
-// ================== HANGING WORDS PROCESSOR ==================
-/**
- * Обрабатывает висячие предлоги в тексте, заменяя обычные пробелы 
- * после них на неразрывные пробелы
- */
-function fixHangingWords(text) {
-  if (!text) return text;
-  
-  const hangingWords = [
-    'и', 'а', 'но', 'да', 'или', 'либо', 'то', 'не', 'ни', 
-    'за', 'для', 'без', 'при', 'про', 'под', 'над', 'через', 'между', 
-    'из', 'от', 'до', 'на', 'в', 'с', 'у', 'о', 'об', 'во', 'со', 'ко',
-    'что', 'как', 'где', 'когда', 'если', 'чтобы', 'который', 'которая'
-  ];
-  
-  let result = text;
-  
-  hangingWords.forEach(word => {
-    // Ищем предлог + пробел + следующее слово
-    // \b - граница слова, \s+ - один или более пробелов
-    const regex = new RegExp(`\\b${word}\\s+`, 'gi');
-    result = result.replace(regex, `${word}\u00A0`); // \u00A0 = неразрывный пробел
-  });
-  
-  return result;
-}
+// ================== INLINE PARSER ==================
 /**
  * Поддержка:
  * __подчеркнуто__
@@ -237,59 +212,48 @@ function wrapSegments(ctx, segments, maxWidth, baseFontSize) {
     }
   };
 
-  // Собираем все слова из всех сегментов
-  const allWords = [];
   for (const seg of segments) {
-    // ИЗМЕНЕНО: разбиваем по обычным пробелам, но НЕ по неразрывным (\u00A0)
-    const words = seg.text.split(/[ \t\n]+/).filter(w => w.trim());
-    words.forEach(word => {
-      allWords.push({ ...seg, text: word });
-    });
-  }
+    const parts = seg.text.split(/(\s+)/); // сохраняем пробелы
+    for (const part of parts) {
+      if (!part) continue;
+      const isSpace = /^\s+$/.test(part);
 
-  for (let i = 0; i < allWords.length; i++) {
-    const word = allWords[i];
-    ctx.font = buildFont(word.bold ? 'bold' : 'normal', baseFontSize);
-    const wordWidth = ctx.measureText(word.text).width;
-    const spaceWidth = ctx.measureText(' ').width;
+      ctx.font = buildFont(seg.bold ? 'bold' : 'normal', baseFontSize);
+      let partWidth = ctx.measureText(part).width;
 
-    // Проверяем поместится ли слово
-    const needSpace = currentRuns.length > 0;
-    const totalWidth = currentWidth + (needSpace ? spaceWidth : 0) + wordWidth;
+      // Если не помещается слово целиком и не пробел
+      if (!isSpace && currentWidth + partWidth > maxWidth) {
+        // Если само слово шире maxWidth — дробим по символам
+        if (partWidth > maxWidth) {
+          let chunk = '';
+          for (const ch of part) {
+            ctx.font = buildFont(seg.bold ? 'bold' : 'normal', baseFontSize);
+            const chWidth = ctx.measureText(ch).width;
 
-    if (totalWidth <= maxWidth) {
-      // Помещается - добавляем
-      if (needSpace) {
-        currentRuns.push({ ...word, text: ' ' });
-        currentWidth += spaceWidth;
-      }
-      currentRuns.push(word);
-      currentWidth += wordWidth;
-    } else {
-      // Не помещается
-      if (wordWidth > maxWidth) {
-        // Слово слишком длинное - дробим по символам (но сохраняем неразрывные пробелы)
-        let chunk = '';
-        for (const ch of word.text) {
-          const chWidth = ctx.measureText(ch).width;
-          if (currentWidth + chWidth > maxWidth && chunk) {
-            currentRuns.push({ ...word, text: chunk });
-            pushLine();
-            chunk = ch;
-            currentWidth = chWidth;
-          } else {
+            if (currentWidth + chWidth > maxWidth && chunk) {
+              currentRuns.push({ ...seg, text: chunk });
+              pushLine();
+              chunk = ch;
+              continue;
+            }
             chunk += ch;
             currentWidth += chWidth;
           }
+          if (chunk) {
+            currentRuns.push({ ...seg, text: chunk });
+          }
+          continue;
         }
-        if (chunk) {
-          currentRuns.push({ ...word, text: chunk });
-        }
-      } else {
-        // Переносим на новую строку
+
+        // Перенос целого слова (не помещается)
         pushLine();
-        currentRuns.push(word);
-        currentWidth = wordWidth;
+        if (isSpace) continue; // пропуск ведущего пробела
+        currentRuns.push({ ...seg, text: part });
+        currentWidth = partWidth;
+      } else {
+        // Помещается в текущую строку
+        currentRuns.push({ ...seg, text: part });
+        currentWidth += partWidth;
       }
     }
   }
@@ -307,13 +271,10 @@ function wrapSegments(ctx, segments, maxWidth, baseFontSize) {
 function renderRichText(ctx, rawText, x, startY, maxWidth, fontConf, baseColor, accentColor, slideIsAccent) {
   if (!rawText) return 0;
 
-  // НОВОЕ: Обрабатываем висячие предлоги ДО parsing
-  const processedText = fixHangingWords(rawText);
-
   const { size: baseFontSize, lineHeightRatio } = fontConf;
   const lineHeight = Math.round(baseFontSize * lineHeightRatio);
 
-  const segments = parseInline(processedText);
+  const segments = parseInline(rawText);
   ctx.font = buildFont('normal', baseFontSize);
   const lines = wrapSegments(ctx, segments, maxWidth, baseFontSize);
 
@@ -324,10 +285,7 @@ function renderRichText(ctx, rawText, x, startY, maxWidth, fontConf, baseColor, 
     let cursorX = x;
 
     for (const run of line.runs) {
-      let txt = run.text;
-      // НОВОЕ: Преобразуем неразрывные пробелы обратно в обычные для отображения
-      txt = txt.replace(/\u00A0/g, ' ');
-      
+      const txt = run.text;
       const isSpace = /^\s+$/.test(txt);
       const weight = run.bold ? 'bold' : 'normal';
       ctx.font = buildFont(weight, baseFontSize);
@@ -511,33 +469,19 @@ function renderIntroSlide(ctx, slide, contentY, contentWidth) {
 
 function wrapPlainForIntro(ctx, text, maxWidth) {
   if (!text) return [];
-  
-  // НОВОЕ: Обрабатываем висячие предлоги и для intro слайдов
-  const processedText = fixHangingWords(text);
-  const cleanText = processedText.replace(/[*_]/g, '');
-  
-  // Разбиваем по обычным пробелам, НЕ по неразрывным
-  const words = cleanText.split(/[ \t\n]+/).filter(w => w.trim());
+  const words = text.replace(/[*_]/g, '').split(/\s+/);
   const lines = [];
   let line = '';
-  
   for (const w of words) {
     const test = line ? line + ' ' + w : w;
-    const testForMeasure = test.replace(/\u00A0/g, ' '); // Заменяем для измерения
-    
-    if (ctx.measureText(testForMeasure).width <= maxWidth) {
+    if (ctx.measureText(test).width <= maxWidth) {
       line = test;
     } else {
-      if (line) {
-        // Преобразуем неразрывные пробелы обратно для отображения
-        lines.push(line.replace(/\u00A0/g, ' '));
-      }
+      if (line) lines.push(line);
       line = w;
     }
   }
-  if (line) {
-    lines.push(line.replace(/\u00A0/g, ' '));
-  }
+  if (line) lines.push(line);
   return lines;
 }
 
