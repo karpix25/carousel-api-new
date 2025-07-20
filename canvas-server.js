@@ -1,9 +1,9 @@
 /**
  * Canvas Carousel API
- * Continuous underline spans + typographic baseline offset
+ * Continuous underline across spaces (lower typographic position)
  * CommonJS version
  */
-console.log('🎯 ФИНАЛЬНАЯ ПРОДАКШН ВЕРСИЯ - Canvas API (typographic underline)');
+console.log('🎯 ФИНАЛЬНАЯ ПРОДАКШН ВЕРСИЯ - Canvas API (continuous underline across spaces)');
 
 const express = require('express');
 const { marked } = require('marked');
@@ -73,20 +73,13 @@ function renderAvatar(ctx, avatarImage, x, y, size) {
 }
 
 // ================== INLINE PARSER ==================
-/**
- * Поддержка:
- * __подчеркнуто__
- * **жирно**
- * __**жирно+подчеркнуто**__
- * plain
- */
 function parseInline(raw) {
   if (!raw) return [];
   const tokens = [];
   const regex = /(__\*\*.+?\*\*__|__.+?__|\*\*.+?\*\*|[^*_]+)/g;
-  let match;
-  while ((match = regex.exec(raw)) !== null) {
-    let chunk = match[0];
+  let m;
+  while ((m = regex.exec(raw)) !== null) {
+    let chunk = m[0];
     let bold = false;
     let underline = false;
     let text = chunk;
@@ -102,12 +95,10 @@ function parseInline(raw) {
       bold = true;
       text = text.slice(2, -2);
     }
-
     if (!text) continue;
     tokens.push({ text, bold, underline });
   }
-
-  // merge
+  // Merge смежных одинаковых
   const merged = [];
   for (const t of tokens) {
     const last = merged[merged.length - 1];
@@ -120,7 +111,7 @@ function parseInline(raw) {
   return merged;
 }
 
-// ================== SEGMENT WRAPPING ==================
+// ================== WRAP ==================
 function wrapSegments(ctx, segments, maxWidth, baseFontSize) {
   const lines = [];
   let currentRuns = [];
@@ -139,36 +130,34 @@ function wrapSegments(ctx, segments, maxWidth, baseFontSize) {
     for (const part of parts) {
       if (!part) continue;
       const isSpace = /^\s+$/.test(part);
-
       ctx.font = buildFont(seg.bold ? 'bold' : 'normal', baseFontSize);
-      const partWidth = ctx.measureText(part).width;
+      const w = ctx.measureText(part).width;
 
-      if (!isSpace && currentWidth + partWidth > maxWidth) {
-        // слишком длинное слово — дробим
-        if (partWidth > maxWidth) {
+      if (!isSpace && currentWidth + w > maxWidth) {
+        if (w > maxWidth) {
+          // посимвольное разбиение очень длинного слова
           let chunk = '';
-            for (const ch of part) {
-              ctx.font = buildFont(seg.bold ? 'bold' : 'normal', baseFontSize);
-              const chWidth = ctx.measureText(ch).width;
-              if (currentWidth + chWidth > maxWidth && chunk) {
-                currentRuns.push({ ...seg, text: chunk });
-                pushLine();
-                chunk = ch;
-                continue;
-              }
-              chunk += ch;
-              currentWidth += chWidth;
+          for (const ch of part) {
+            const chW = ctx.measureText(ch).width;
+            if (currentWidth + chW > maxWidth && chunk) {
+              currentRuns.push({ ...seg, text: chunk });
+              pushLine();
+              chunk = ch;
+              continue;
             }
-            if (chunk) currentRuns.push({ ...seg, text: chunk });
+            chunk += ch;
+            currentWidth += chW;
+          }
+          if (chunk) currentRuns.push({ ...seg, text: chunk });
           continue;
         }
         pushLine();
         if (isSpace) continue;
         currentRuns.push({ ...seg, text: part });
-        currentWidth = partWidth;
+        currentWidth = w;
       } else {
         currentRuns.push({ ...seg, text: part });
-        currentWidth += partWidth;
+        currentWidth += w;
       }
     }
   }
@@ -176,13 +165,9 @@ function wrapSegments(ctx, segments, maxWidth, baseFontSize) {
   return lines;
 }
 
-// ================== RICH TEXT RENDER ==================
-/**
- * Непрерывные underline spans + типографская позиция
- */
+// ================== RICH TEXT (continuous underline across spaces) ==================
 function renderRichText(ctx, rawText, x, startY, maxWidth, fontConf, baseColor, accentColor, slideIsAccent) {
   if (!rawText) return 0;
-
   const { size: baseFontSize, lineHeightRatio } = fontConf;
   const lineHeight = Math.round(baseFontSize * lineHeightRatio);
 
@@ -196,50 +181,69 @@ function renderRichText(ctx, rawText, x, startY, maxWidth, fontConf, baseColor, 
   for (const line of lines) {
     let cursorX = x;
     let activeSpan = null; // {x1,x2,y,color}
+    let maxDescentInSpan = 0;
 
     for (const run of line.runs) {
       const txt = run.text;
       const isSpace = /^\s+$/.test(txt);
       ctx.font = buildFont(run.bold ? 'bold' : 'normal', baseFontSize);
 
-      // Цвет подчёркнутого жирного (если фон default)
       const useAccent = run.underline && run.bold && !slideIsAccent;
       ctx.fillStyle = useAccent ? accentColor : baseColor;
-
       ctx.textBaseline = 'alphabetic';
+
       if (!isSpace) {
         ctx.fillText(txt, cursorX, y);
       }
 
       const metrics = ctx.measureText(txt);
       const segWidth = metrics.width;
+      const descent = metrics.actualBoundingBoxDescent || baseFontSize * 0.25;
 
       if (run.underline) {
-        // UNDERLINE METRICS
-        const descent = metrics.actualBoundingBoxDescent || baseFontSize * 0.25;
-        const underlineOffset = descent * 0.55; // настрой 0.50–0.65
-        const underlineY = y + underlineOffset;
-
         if (!activeSpan) {
-          activeSpan = { x1: cursorX, x2: cursorX + segWidth, y: underlineY, color: ctx.fillStyle };
+          // начинаем новый непрерывный span
+          maxDescentInSpan = descent;
+          activeSpan = {
+            x1: cursorX,
+            x2: cursorX + segWidth,
+            y: null,          // позже установим
+            color: ctx.fillStyle
+          };
         } else {
-          // Если смена цвета или уровня Y (другая линия) — закрыть предыдущий span
-          if (activeSpan.color !== ctx.fillStyle || Math.abs(activeSpan.y - underlineY) > 1) {
+          // продолжаем span
+          activeSpan.x2 = cursorX + segWidth;
+          if (descent > maxDescentInSpan) maxDescentInSpan = descent;
+          // если цвет сменился — закрываем прошлый и начинаем новый
+          if (activeSpan.color !== ctx.fillStyle) {
+            // финализируем старый с его вычисленным y
+            activeSpan.y = y + maxDescentInSpan * 0.75;
             underlineStrokes.push(activeSpan);
-            activeSpan = { x1: cursorX, x2: cursorX + segWidth, y: underlineY, color: ctx.fillStyle };
-          } else {
-            activeSpan.x2 = cursorX + segWidth;
+            // новый
+            activeSpan = {
+              x1: cursorX,
+              x2: cursorX + segWidth,
+              y: null,
+              color: ctx.fillStyle
+            };
+            maxDescentInSpan = descent;
           }
         }
-      } else if (activeSpan) {
-        underlineStrokes.push(activeSpan);
-        activeSpan = null;
+      } else {
+        // закрываем текущий span если был
+        if (activeSpan) {
+          activeSpan.y = y + maxDescentInSpan * 0.75; // 0.75 — коэффициент глубины
+          underlineStrokes.push(activeSpan);
+          activeSpan = null;
+          maxDescentInSpan = 0;
+        }
       }
 
       cursorX += segWidth;
     }
 
     if (activeSpan) {
+      activeSpan.y = y + maxDescentInSpan * 0.75;
       underlineStrokes.push(activeSpan);
       activeSpan = null;
     }
@@ -247,10 +251,11 @@ function renderRichText(ctx, rawText, x, startY, maxWidth, fontConf, baseColor, 
     y += lineHeight;
   }
 
-  // Рисуем линии
-  const thickness = Math.min(10, Math.max(3, Math.round(baseFontSize * 0.065)));
+  // Рисуем
+  const thickness = Math.min(10, Math.max(3, Math.round(baseFontSize * 0.055)));
   ctx.lineWidth = thickness;
   ctx.lineCap = 'round';
+
   underlineStrokes.forEach(st => {
     ctx.strokeStyle = st.color;
     ctx.beginPath();
@@ -268,24 +273,13 @@ function parseMarkdownToSlides(text) {
   const slides = [];
   let currentSlide = null;
 
-  tokens.forEach((token, index) => {
+  tokens.forEach((token, idx) => {
     if (token.type === 'heading' && token.depth === 1) {
-      const nextToken = tokens[index + 1];
-      const subtitle = (nextToken && nextToken.type === 'paragraph') ? nextToken.text : '';
-      slides.push({
-        type: 'intro',
-        title: token.text,
-        text: subtitle,
-        color: 'accent'
-      });
+      const next = tokens[idx + 1];
+      const subtitle = (next && next.type === 'paragraph') ? next.text : '';
+      slides.push({ type: 'intro', title: token.text, text: subtitle, color: 'accent' });
     } else if (token.type === 'heading' && token.depth === 2) {
-      currentSlide = {
-        type: 'text',
-        title: token.text,
-        text: '',
-        color: 'default',
-        content: []
-      };
+      currentSlide = { type: 'text', title: token.text, text: '', color: 'default', content: [] };
       slides.push(currentSlide);
     } else if (token.type === 'blockquote') {
       const quoteText = token.tokens?.[0]?.text || '';
@@ -299,10 +293,7 @@ function parseMarkdownToSlides(text) {
       if (token.type === 'paragraph') {
         currentSlide.content.push({ type: 'paragraph', text: token.text });
       } else if (token.type === 'list') {
-        currentSlide.content.push({
-          type: 'list',
-          items: token.items.map(item => item.text)
-        });
+        currentSlide.content.push({ type: 'list', items: token.items.map(i => i.text) });
       }
     }
   });
@@ -316,7 +307,7 @@ function parseMarkdownToSlides(text) {
       if (lists.length) {
         if (fullText) fullText += '\n\n';
         lists.forEach(list => {
-          fullText += list.items.map(i => `• ${i}`).join('\n');
+          fullText += list.items.map(it => `• ${it}`).join('\n');
         });
       }
       slide.text = fullText;
@@ -329,48 +320,37 @@ function parseMarkdownToSlides(text) {
 
 // ================== FINAL SLIDE ==================
 function addFinalSlide(slides, settings) {
-  const finalSlideConfig = settings.finalSlide;
-  if (!finalSlideConfig || !finalSlideConfig.enabled) return slides;
+  const cfg = settings.finalSlide;
+  if (!cfg || !cfg.enabled) return slides;
 
   const templates = {
-    cta: {
-      title: 'Подписывайтесь!',
-      text: 'Ставьте лайк если полезно\n\nБольше контента в профиле',
-      color: 'accent'
-    },
-    contact: {
-      title: 'Связаться со мной:',
-      text: 'email@example.com\n\nTelegram: @username\n\nwebsite.com',
-      color: 'default'
-    },
-    brand: {
-      title: 'Спасибо за внимание!',
-      text: 'Помогаю бизнесу расти\n\nКонсультации и стратегии',
-      color: 'accent'
-    }
+    cta: { title: 'Подписывайтесь!', text: 'Ставьте лайк если полезно\n\nБольше контента в профиле', color: 'accent' },
+    contact: { title: 'Связаться со мной:', text: 'email@example.com\n\nTelegram: @username\n\nwebsite.com', color: 'default' },
+    brand: { title: 'Спасибо за внимание!', text: 'Помогаю бизнесу расти\n\nКонсультации и стратегии', color: 'accent' }
   };
 
   let finalSlide;
-  if (finalSlideConfig.type && templates[finalSlideConfig.type]) {
+  if (cfg.type && templates[cfg.type]) {
     finalSlide = {
       type: 'text',
-      ...templates[finalSlideConfig.type],
-      ...(finalSlideConfig.title && { title: finalSlideConfig.title }),
-      ...(finalSlideConfig.text && { text: finalSlideConfig.text }),
-      ...(finalSlideConfig.color && { color: finalSlideConfig.color })
+      ...templates[cfg.type],
+      ...(cfg.title && { title: cfg.title }),
+      ...(cfg.text && { text: cfg.text }),
+      ...(cfg.color && { color: cfg.color })
     };
   } else {
     finalSlide = {
       type: 'text',
-      title: finalSlideConfig.title || 'Спасибо за внимание!',
-      text: finalSlideConfig.text || 'Больше контента в профиле',
-      color: finalSlideConfig.color || 'accent'
+      title: cfg.title || 'Спасибо за внимание!',
+      text: cfg.text || 'Больше контента в профиле',
+      color: cfg.color || 'accent'
     };
   }
+
   return [...slides, finalSlide];
 }
 
-// ================== SIMPLE WRAPS ==================
+// ================== SIMPLE WRAP FOR TITLES ==================
 function wrapPlainForIntro(ctx, text, maxWidth) {
   if (!text) return [];
   const words = text.replace(/[*_]/g, '').split(/\s+/);
@@ -396,7 +376,6 @@ function renderIntroSlide(ctx, slide, contentY, contentWidth) {
   ctx.textAlign = 'left';
   const titleLines = wrapPlainForIntro(ctx, slide.title || '', contentWidth);
   let y = contentY;
-
   titleLines.forEach(line => {
     ctx.fillText(line, CONFIG.CANVAS.PADDING, y);
     y += titleStyle.lineHeight;
@@ -485,7 +464,7 @@ function renderQuoteSlide(ctx, slide, contentY, contentHeight, contentWidth) {
   });
 }
 
-// ================== MAIN RENDER FUNCTION ==================
+// ================== MAIN RENDER ==================
 async function renderSlideToCanvas(slide, slideNumber, totalSlides, settings, avatarImage = null) {
   const {
     brandColor = CONFIG.COLORS.ACCENT_FALLBACK,
@@ -533,10 +512,10 @@ async function renderSlideToCanvas(slide, slideNumber, totalSlides, settings, av
   ctx.fillText(`${slideNumber}/${totalSlides}`, CONFIG.CANVAS.WIDTH - CONFIG.CANVAS.PADDING, CONFIG.CANVAS.HEADER_FOOTER_PADDING);
   ctx.globalAlpha = 1;
 
-  // Content area
+  // Content
   const contentY = CONFIG.CANVAS.CONTENT_START_Y;
   const contentHeight = CONFIG.CANVAS.HEIGHT - contentY - CONFIG.CANVAS.HEADER_FOOTER_PADDING;
-  const contentWidth = CONFIG.CANVAS.WIDTH - (CONFIG.CANVAS.PADDING * 2);
+  const contentWidth = CONFIG.CANVAS.WIDTH - CONFIG.CANVAS.PADDING * 2;
 
   if (slide.type === 'intro') {
     renderIntroSlide(ctx, slide, contentY, contentWidth);
@@ -560,14 +539,14 @@ async function renderSlideToCanvas(slide, slideNumber, totalSlides, settings, av
   return canvas;
 }
 
-// ================== EXPRESS APP ==================
+// ================== EXPRESS ==================
 const app = express();
 app.use(express.json({ limit: '10mb' }));
 
 app.get('/health', (req, res) => {
   res.json({
     status: 'production-ready',
-    engine: 'canvas-api-typographic-underline',
+    engine: 'canvas-api-underline-continuous',
     performance: 'optimized',
     memory: 'efficient'
   });
@@ -577,9 +556,7 @@ app.post('/api/generate-carousel', async (req, res) => {
   const startTime = Date.now();
   try {
     const { text, settings = {} } = req.body;
-    if (!text) {
-      return res.status(400).json({ error: 'Требуется текст' });
-    }
+    if (!text) return res.status(400).json({ error: 'Требуется текст' });
 
     let avatarImage = null;
     if (settings.avatarUrl) {
@@ -613,7 +590,7 @@ app.post('/api/generate-carousel', async (req, res) => {
         generatedAt: new Date().toISOString(),
         processingTime,
         settings,
-        engine: 'canvas-api-typographic-underline'
+        engine: 'canvas-api-underline-continuous'
       }
     });
   } catch (e) {
@@ -631,5 +608,5 @@ process.on('SIGTERM', () => {
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => {
   console.log(`🚀 PRODUCTION Canvas API на порту ${PORT}`);
-  console.log(`🎨 Typographic underline ready.`);
+  console.log(`🎨 Continuous underline (across spaces) ready.`);
 });
