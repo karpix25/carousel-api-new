@@ -39,6 +39,19 @@ const CONFIG = {
   }
 };
 
+// Функция для загрузки изображения (Canvas API версия)
+async function loadAvatarImage(url) {
+  try {
+    console.log('🖼️ Загружаем аватарку:', url);
+    const image = await loadImage(url); // Используем loadImage из canvas
+    console.log('✅ Аватарка загружена успешно');
+    return image;
+  } catch (error) {
+    console.warn('❌ Не удалось загрузить аватарку:', error.message);
+    return null;
+  }
+}
+
 // Функция для получения CSS шрифта и line-height
 function getFontStyle(fontConfig) {
   const fontCSS = `${fontConfig.weight} ${fontConfig.size}px Arial`;
