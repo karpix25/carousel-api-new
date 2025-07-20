@@ -2,7 +2,7 @@ console.log('🎯 ФИНАЛЬНАЯ ПРОДАКШН ВЕРСИЯ - Canvas API'
 
 const express = require('express');
 const { marked } = require('marked');
-const { createCanvas, loadImage } = require('canvas');
+const { createCanvas, loadImage } = require('canvas'); // ИСПРАВЛЕНО: импортируем loadImage из canvas
 
 const app = express();
 app.use(express.json({ limit: '10mb' }));
@@ -39,114 +39,17 @@ const CONFIG = {
   }
 };
 
-// Простые иконки через Canvas API (без SVG)
-const CANVAS_ICONS = {
-  share: (ctx, x, y, size, color) => {
-    ctx.fillStyle = color;
-    ctx.beginPath();
-    // Рисуем стрелку поделиться через простые фигуры
-    const centerX = x + size/2;
-    const centerY = y + size/2;
-    const s = size/4; // масштаб
-    
-    // Стрелка вправо-вверх
-    ctx.moveTo(centerX - s, centerY);
-    ctx.lineTo(centerX + s, centerY - s);
-    ctx.lineTo(centerX + s/2, centerY - s);
-    ctx.lineTo(centerX + s/2, centerY - s*2);
-    ctx.lineTo(centerX + s*1.5, centerY - s*2);
-    ctx.lineTo(centerX + s*1.5, centerY - s/2);
-    ctx.lineTo(centerX + s, centerY - s/2);
-    ctx.lineTo(centerX + s, centerY);
-    ctx.lineTo(centerX + s*2, centerY + s);
-    ctx.lineTo(centerX - s, centerY + s);
-    ctx.closePath();
-    ctx.fill();
-  },
-  
-  heart: (ctx, x, y, size, color) => {
-    ctx.fillStyle = color;
-    ctx.beginPath();
-    const centerX = x + size/2;
-    const centerY = y + size/2;
-    const s = size/6;
-    
-    // Левая половина сердца
-    ctx.arc(centerX - s, centerY - s/2, s, 0, Math.PI * 2);
-    ctx.fill();
-    
-    // Правая половина сердца  
-    ctx.beginPath();
-    ctx.arc(centerX + s, centerY - s/2, s, 0, Math.PI * 2);
-    ctx.fill();
-    
-    // Нижняя часть сердца (треугольник)
-    ctx.beginPath();
-    ctx.moveTo(centerX - s*2, centerY);
-    ctx.lineTo(centerX, centerY + s*2);
-    ctx.lineTo(centerX + s*2, centerY);
-    ctx.closePath();
-    ctx.fill();
-  },
-  
-  arrow: (ctx, x, y, size, color) => {
-    ctx.fillStyle = color;
-    ctx.beginPath();
-    const centerX = x + size/2;
-    const centerY = y + size/2;
-    const s = size/4;
-    
-    // Стрелка вправо
-    ctx.moveTo(centerX - s, centerY - s);
-    ctx.lineTo(centerX + s, centerY);
-    ctx.lineTo(centerX - s, centerY + s);
-    ctx.lineTo(centerX - s/2, centerY + s/2);
-    ctx.lineTo(centerX + s/2, centerY);
-    ctx.lineTo(centerX - s/2, centerY - s/2);
-    ctx.closePath();
-    ctx.fill();
-  }
-};
-
-// Функция для рендеринга Canvas иконки (без SVG)
-function renderCanvasIcon(ctx, iconName, x, y, size, color = '#000000') {
-  if (!CANVAS_ICONS[iconName]) {
-    console.warn(`Иконка ${iconName} не найдена`);
-    return;
-  }
-  
-  try {
-    CANVAS_ICONS[iconName](ctx, x, y, size, color);
-  } catch (error) {
-    console.warn('Ошибка рендеринга иконки:', error);
-  }
-}
-
 // Функция для загрузки изображения (Canvas API версия)
 async function loadAvatarImage(url) {
   try {
     console.log('🖼️ Загружаем аватарку:', url);
-    const image = await loadImage(url);
+    const image = await loadImage(url); // Используем loadImage из canvas
     console.log('✅ Аватарка загружена успешно');
     return image;
   } catch (error) {
     console.warn('❌ Не удалось загрузить аватарку:', error.message);
     return null;
   }
-}
-
-// Функция для создания финального слайда
-function createFinalSlide(settings) {
-  const finalSlide = settings.finalSlide;
-  if (!finalSlide || !finalSlide.enabled) return null;
-  
-  return {
-    type: 'final',
-    title: finalSlide.title || 'Подписывайтесь!',
-    text: finalSlide.text || 'Ставьте лайк если полезно\n\nБольше контента в профиле',
-    color: finalSlide.color || 'accent',
-    icon: finalSlide.icon || 'share'
-  };
 }
 
 // Функция для получения CSS шрифта и line-height
@@ -381,15 +284,17 @@ async function renderSlideToCanvas(slide, slideNumber, totalSlides, settings) {
     brandColor = CONFIG.COLORS.ACCENT_FALLBACK,
     authorUsername = '@username',
     authorFullName = 'Your Name',
-    avatarUrl = null,
-    preloadedAvatar = null
+    avatarUrl = null // Новый параметр для аватарки
   } = settings;
 
   const canvas = createCanvas(CONFIG.CANVAS.WIDTH, CONFIG.CANVAS.HEIGHT);
   const ctx = canvas.getContext('2d');
   
-  // Используем предзагруженную аватарку
-  let avatarImage = preloadedAvatar;
+  // Загружаем аватарку если указана
+  let avatarImage = null;
+  if (avatarUrl) {
+    avatarImage = await loadAvatarImage(avatarUrl); // Используем правильную функцию
+  }
   
   // Цвета
   const isAccent = slide.color === 'accent';
@@ -409,13 +314,13 @@ async function renderSlideToCanvas(slide, slideNumber, totalSlides, settings) {
   ctx.font = headerFooter.fontCSS;
   ctx.globalAlpha = 0.7;
   
-  const avatarSize = 100;
-  const avatarPadding = 16;
+  const avatarSize = 40; // ИЗМЕНЕНО: уменьшил с 48 до 40px
+  const avatarPadding = 12; // ИЗМЕНЕНО: уменьшил отступ с 16 до 12px
   
   if (avatarImage) {
     // Вычисляем позицию для центрирования аватарки с текстом
     const textBaseline = CONFIG.CANVAS.HEADER_FOOTER_PADDING;
-    const avatarY = textBaseline - avatarSize/2 - 9;
+    const avatarY = textBaseline - avatarSize/2 - 6; // Центрируем относительно baseline текста
     
     // Рендерим аватарку
     renderAvatar(ctx, avatarImage, CONFIG.CANVAS.PADDING, avatarY, avatarSize);
@@ -434,7 +339,7 @@ async function renderSlideToCanvas(slide, slideNumber, totalSlides, settings) {
   ctx.fillText(`${slideNumber}/${totalSlides}`, CONFIG.CANVAS.WIDTH - CONFIG.CANVAS.PADDING, CONFIG.CANVAS.HEADER_FOOTER_PADDING);
   ctx.globalAlpha = 1;
 
-  // Content area
+  // Content area - начинается с правильного отступа
   const contentY = CONFIG.CANVAS.CONTENT_START_Y;
   const contentHeight = CONFIG.CANVAS.HEIGHT - contentY - CONFIG.CANVAS.HEADER_FOOTER_PADDING;
   const contentWidth = CONFIG.CANVAS.WIDTH - (CONFIG.CANVAS.PADDING * 2);
@@ -445,11 +350,9 @@ async function renderSlideToCanvas(slide, slideNumber, totalSlides, settings) {
     renderTextSlide(ctx, slide, contentY, contentWidth);
   } else if (slide.type === 'quote') {
     renderQuoteSlide(ctx, slide, contentY, contentHeight, contentWidth);
-  } else if (slide.type === 'final') {
-    renderFinalSlide(ctx, slide, contentY, contentHeight, contentWidth, textColor);
   }
 
-  // Footer
+  // Footer - отступ по формуле ×4 от веб-версии
   ctx.font = headerFooter.fontCSS;
   ctx.globalAlpha = 0.7;
   ctx.textAlign = 'left';
@@ -579,60 +482,6 @@ function renderQuoteSlide(ctx, slide, contentY, contentHeight, contentWidth) {
   });
 }
 
-// ИСПРАВЛЕНО: Функция для рендеринга финального слайда с Canvas иконкой
-function renderFinalSlide(ctx, slide, contentY, contentHeight, contentWidth, textColor) {
-  const titleStyle = getFontStyle(CONFIG.FONTS.TITLE_TEXT_WITH_CONTENT);
-  const textStyle = getFontStyle(CONFIG.FONTS.TEXT);
-  
-  // Центрируем весь контент вертикально
-  const iconSize = 64;
-  const totalContentHeight = titleStyle.lineHeight + CONFIG.SPACING.H2_TO_P + 
-                            (slide.text.split('\n').length * textStyle.lineHeight) + 32 + iconSize;
-  
-  let y = contentY + (contentHeight - totalContentHeight) / 2;
-  
-  // ИСПРАВЛЕНО: Рендерим Canvas иконку сверху по центру
-  if (slide.icon) {
-    const iconX = (CONFIG.CANVAS.WIDTH - iconSize) / 2;
-    renderCanvasIcon(ctx, slide.icon, iconX, y, iconSize, textColor);
-    y += iconSize + 32; // Отступ после иконки
-  }
-  
-  // Заголовок по центру
-  if (slide.title) {
-    ctx.font = titleStyle.fontCSS;
-    ctx.textAlign = 'center';
-    const titleLines = wrapText(ctx, slide.title, contentWidth);
-    titleLines.forEach(line => {
-      ctx.fillText(line, CONFIG.CANVAS.WIDTH / 2, y);
-      y += titleStyle.lineHeight;
-    });
-    y += CONFIG.SPACING.H2_TO_P; // Отступ после заголовка
-  }
-  
-  // Основной текст по центру
-  if (slide.text) {
-    ctx.font = textStyle.fontCSS;
-    ctx.textAlign = 'center';
-    const textLines = slide.text.split('\n').filter(line => line.trim());
-    
-    textLines.forEach((line, lineIndex) => {
-      const isLastLine = lineIndex === textLines.length - 1;
-      const wrappedLines = wrapText(ctx, line.trim(), contentWidth);
-      
-      wrappedLines.forEach(wrappedLine => {
-        ctx.fillText(wrappedLine, CONFIG.CANVAS.WIDTH / 2, y);
-        y += textStyle.lineHeight;
-      });
-      
-      // Отступ между параграфами (кроме последнего)
-      if (!isLastLine) {
-        y += CONFIG.SPACING.P_TO_P;
-      }
-    });
-  }
-}
-
 // API Routes
 app.get('/health', (req, res) => {
   res.json({ 
@@ -659,12 +508,6 @@ app.post('/api/generate-carousel', async (req, res) => {
       console.log('🖼️ Используется аватарка:', settings.avatarUrl);
     }
 
-    // ЗАГРУЖАЕМ АВАТАРКУ ОДИН РАЗ для всех слайдов
-    let avatarImage = null;
-    if (settings.avatarUrl) {
-      avatarImage = await loadAvatarImage(settings.avatarUrl);
-    }
-
     // Парсинг
     const slides = parseMarkdownToSlides(text);
     
@@ -677,20 +520,12 @@ app.post('/api/generate-carousel', async (req, res) => {
       });
     }
 
-    // Добавляем финальный слайд если нужно
-    const finalSlide = createFinalSlide(settings);
-    if (finalSlide) {
-      slides.push(finalSlide);
-      console.log('📄 Добавлен финальный слайд');
-    }
-
     console.log(`📝 Создано слайдов: ${slides.length}`);
 
-    // Рендеринг с переиспользованием аватарки
+    // Рендеринг с поддержкой аватарки
     const images = [];
     for (let i = 0; i < slides.length; i++) {
-      // Передаем уже загруженную аватарку
-      const canvas = await renderSlideToCanvas(slides[i], i + 1, slides.length, {...settings, preloadedAvatar: avatarImage});
+      const canvas = await renderSlideToCanvas(slides[i], i + 1, slides.length, settings);
       const base64 = canvas.toBuffer('image/png').toString('base64');
       images.push(base64);
     }
