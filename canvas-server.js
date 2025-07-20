@@ -176,13 +176,13 @@ function renderSlideToCanvas(slide, slideNumber, totalSlides, settings) {
   
   ctx.fillStyle = textColor;
   
-  // Header
+  // Header - отступ 220px сверху
   ctx.font = CONFIG.FONTS.HEADER_FOOTER;
   ctx.globalAlpha = 0.7;
   ctx.textAlign = 'left';
-  ctx.fillText(authorUsername, CONFIG.CANVAS.PADDING, CONFIG.CANVAS.PADDING + 40);
+  ctx.fillText(authorUsername, CONFIG.CANVAS.PADDING, 220);
   ctx.textAlign = 'right';
-  ctx.fillText(`${slideNumber}/${totalSlides}`, CONFIG.CANVAS.WIDTH - CONFIG.CANVAS.PADDING, CONFIG.CANVAS.PADDING + 40);
+  ctx.fillText(`${slideNumber}/${totalSlides}`, CONFIG.CANVAS.WIDTH - CONFIG.CANVAS.PADDING, 220);
   ctx.globalAlpha = 1;
 
   // Content area
@@ -198,14 +198,14 @@ function renderSlideToCanvas(slide, slideNumber, totalSlides, settings) {
     renderQuoteSlide(ctx, slide, contentY, contentHeight, contentWidth);
   }
 
-  // Footer
+  // Footer - отступ 220px снизу
   ctx.font = CONFIG.FONTS.HEADER_FOOTER;
   ctx.globalAlpha = 0.7;
   ctx.textAlign = 'left';
-  ctx.fillText(authorFullName, CONFIG.CANVAS.PADDING, CONFIG.CANVAS.HEIGHT - CONFIG.CANVAS.PADDING);
+  ctx.fillText(authorFullName, CONFIG.CANVAS.PADDING, CONFIG.CANVAS.HEIGHT - 220);
   ctx.textAlign = 'right';
   if (slideNumber < totalSlides) {
-    ctx.fillText('→', CONFIG.CANVAS.WIDTH - CONFIG.CANVAS.PADDING, CONFIG.CANVAS.HEIGHT - CONFIG.CANVAS.PADDING);
+    ctx.fillText('→', CONFIG.CANVAS.WIDTH - CONFIG.CANVAS.PADDING, CONFIG.CANVAS.HEIGHT - 220);
   }
   ctx.globalAlpha = 1;
 
