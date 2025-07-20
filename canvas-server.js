@@ -1,36 +1,37 @@
-console.log('🎯 ФИНАЛЬНАЯ ПРОДАКШН ВЕРСИЯ - Canvas API с цветным подчеркиванием');
+/**
+ * Canvas Carousel API (improved underline + wrapping)
+ * CommonJS version
+ */
+console.log('🎯 ФИНАЛЬНАЯ ПРОДАКШН ВЕРСИЯ - Canvas API (improved underline engine)');
 
 const express = require('express');
 const { marked } = require('marked');
 const { createCanvas, loadImage } = require('canvas');
 
-const app = express();
-app.use(express.json({ limit: '10mb' }));
-
-// Конфигурация с правильным масштабированием ×4 от веб-версии
+// ================== CONFIG ==================
 const CONFIG = {
   CANVAS: {
     WIDTH: 1600,
     HEIGHT: 2000,
-    PADDING: 144, // 36px × 4 = 144px (боковые отступы)
+    PADDING: 144,
     BORDER_RADIUS: 64,
-    HEADER_FOOTER_PADDING: 192, // 48px × 4 = 192px (верх/низ)
-    CONTENT_GAP: 144, // 36px × 4 = 144px (gap между header и content)
-    CONTENT_START_Y: 420 // ИСПРАВЛЕНО: возвращаем 420px от верха
+    HEADER_FOOTER_PADDING: 192,
+    CONTENT_GAP: 144,
+    CONTENT_START_Y: 420
   },
   FONTS: {
     TITLE_INTRO: { size: 128, weight: 'bold', lineHeightRatio: 1.1 },
     SUBTITLE_INTRO: { size: 64, weight: 'normal', lineHeightRatio: 1.25 },
-    TITLE_TEXT_WITH_CONTENT: { size: 96, weight: 'bold', lineHeightRatio: 1.2 }, // 24px × 4 = 96px
+    TITLE_TEXT_WITH_CONTENT: { size: 96, weight: 'bold', lineHeightRatio: 1.2 },
     TITLE_TEXT_ONLY: { size: 136, weight: 'bold', lineHeightRatio: 1.2 },
-    TEXT: { size: 64, weight: 'normal', lineHeightRatio: 1.4 }, // 16px × 4 = 64px
+    TEXT: { size: 64, weight: 'normal', lineHeightRatio: 1.4 },
     QUOTE_LARGE: { size: 96, weight: 'bold', lineHeightRatio: 1.2 },
     QUOTE_SMALL: { size: 64, weight: 'bold', lineHeightRatio: 1.3 },
-    HEADER_FOOTER: { size: 48, weight: 'normal', lineHeightRatio: 1.4 } // 12px × 4 = 48px
+    HEADER_FOOTER: { size: 48, weight: 'normal', lineHeightRatio: 1.4 }
   },
   SPACING: {
-    H2_TO_P: 80, // 20px × 4 = 80px (margin-bottom h2) - БОЛЬШОЙ отступ между блоками
-    P_TO_P: 24   // ИСПРАВЛЕНО: 6px × 4 = 24px - МАЛЕНЬКИЙ отступ внутри блока
+    H2_TO_P: 80,
+    P_TO_P: 24
   },
   COLORS: {
     DEFAULT_BG: '#ffffff',
@@ -39,186 +40,222 @@ const CONFIG = {
   }
 };
 
-// Функция для загрузки изображения (Canvas API версия)
-async function loadAvatarImage(url) {
-  try {
-    console.log('🖼️ Загружаем аватарку:', url);
-    const image = await loadImage(url);
-    console.log('✅ Аватарка загружена успешно');
-    return image;
-  } catch (error) {
-    console.warn('❌ Не удалось загрузить аватарку:', error.message);
-    return null;
-  }
-}
-
-// Функция для получения CSS шрифта и line-height
+// ================== HELPERS ==================
 function getFontStyle(fontConfig) {
   const fontCSS = `${fontConfig.weight} ${fontConfig.size}px Arial`;
   const lineHeight = Math.round(fontConfig.size * fontConfig.lineHeightRatio);
   return { fontCSS, lineHeight };
 }
 
-// Функция для рендеринга круглой аватарки
+function buildFont(weight, size) {
+  return `${weight} ${size}px Arial`;
+}
+
+async function loadAvatarImage(url) {
+  try {
+    const image = await loadImage(url);
+    return image;
+  } catch (e) {
+    console.warn('Не удалось загрузить аватарку:', e.message);
+    return null;
+  }
+}
+
 function renderAvatar(ctx, avatarImage, x, y, size) {
   if (!avatarImage) return;
-  
   ctx.save();
-  
-  // Создаем круглую маску
   ctx.beginPath();
-  ctx.arc(x + size/2, y + size/2, size/2, 0, Math.PI * 2);
+  ctx.arc(x + size / 2, y + size / 2, size / 2, 0, Math.PI * 2);
   ctx.clip();
-  
-  // Рисуем изображение в круге
   ctx.drawImage(avatarImage, x, y, size, size);
-  
   ctx.restore();
 }
 
-// ТОЧНО ваша функция + ТОЛЬКО висячие предлоги + обработка спецсимволов
-function wrapText(ctx, text, maxWidth) {
-  if (!text) return [];
-  
-  // Убираем спецсимволы для правильного расчета ширины
-  const cleanText = text.replace(/[*_]/g, '');
-  const words = cleanText.split(' ');
-  const lines = [];
-  let currentLine = words[0] || '';
+// ================== INLINE PARSER ==================
+/**
+ * Поддержка:
+ * __подчеркнуто__
+ * **жирно**
+ * __**жирно+подчеркнуто**__
+ * Остальное — plain
+ */
+function parseInline(raw) {
+  if (!raw) return [];
+  const tokens = [];
+  // Группа: __**...**__ | __...__ | **...** | обычный текст (без *_ )
+  const regex = /(__\*\*.+?\*\*__|__.+?__|\*\*.+?\*\*|[^*_]+)/g;
+  let match;
+  while ((match = regex.exec(raw)) !== null) {
+    let chunk = match[0];
+    let bold = false;
+    let underline = false;
+    let text = chunk;
 
-  // Висячие предлоги
-  const hangingWords = [
-    'и', 'а', 'но', 'да', 'или', 'либо', 'то', 'не', 'ни', 
-    'за', 'для', 'без', 'при', 'про', 'под', 'над', 'через', 'между', 
-    'из', 'от', 'до', 'на', 'в', 'с', 'у', 'о', 'об', 'во', 'со', 'ко',
-    'что', 'как', 'где', 'когда', 'если', 'чтобы', 'который', 'которая'
-  ];
-
-  for (let i = 1; i < words.length; i++) {
-    const word = words[i];
-    const testLine = currentLine + ' ' + word;
-    const width = ctx.measureText(testLine).width;
-    
-    if (width < maxWidth - 20) { // Добавляем буферную зону 20px
-      currentLine = testLine;
-      
-      // УЛУЧШЕННАЯ проверка висячих предлогов
-      const nextWord = words[i + 1];
-      if (nextWord && hangingWords.includes(word.toLowerCase().replace(/[*_.,!?]/g, ''))) {
-        const testWithNext = currentLine + ' ' + nextWord;
-        const widthWithNext = ctx.measureText(testWithNext).width;
-        
-        if (widthWithNext < maxWidth - 20) {
-          currentLine = testWithNext;
-          i++; // Пропускаем следующее слово
-        }
+    if (chunk.startsWith('__') && chunk.endsWith('__')) {
+      underline = true;
+      text = text.slice(2, -2);
+      if (text.startsWith('**') && text.endsWith('**')) {
+        bold = true;
+        text = text.slice(2, -2);
       }
+    } else if (chunk.startsWith('**') && chunk.endsWith('**')) {
+      bold = true;
+      text = text.slice(2, -2);
+    }
+
+    if (!text) continue;
+    tokens.push({ text, bold, underline });
+  }
+
+  // Слияние смежных одинаковых стилей
+  const merged = [];
+  for (const t of tokens) {
+    const last = merged[merged.length - 1];
+    if (last && last.bold === t.bold && last.underline === t.underline) {
+      last.text += t.text;
     } else {
-      lines.push(currentLine);
-      currentLine = word;
+      merged.push(t);
     }
   }
-  
-  if (currentLine) {
-    lines.push(currentLine);
+  return merged;
+}
+
+// ================== SEGMENT WRAPPING ==================
+/**
+ * wrapSegments:
+ * - Получает массив сегментов [{text, bold, underline}]
+ * - Возвращает массив lines: [{runs: [segments], width}]
+ * - Разбивает превышающие слова посимвольно
+ */
+function wrapSegments(ctx, segments, maxWidth, baseFontSize) {
+  const lines = [];
+  let currentRuns = [];
+  let currentWidth = 0;
+
+  const pushLine = () => {
+    if (currentRuns.length) {
+      lines.push({ runs: currentRuns, width: currentWidth });
+      currentRuns = [];
+      currentWidth = 0;
+    }
+  };
+
+  for (const seg of segments) {
+    const parts = seg.text.split(/(\s+)/); // сохраняем пробелы
+    for (const part of parts) {
+      if (!part) continue;
+      const isSpace = /^\s+$/.test(part);
+
+      ctx.font = buildFont(seg.bold ? 'bold' : 'normal', baseFontSize);
+      let partWidth = ctx.measureText(part).width;
+
+      // Если не помещается слово целиком и не пробел
+      if (!isSpace && currentWidth + partWidth > maxWidth) {
+        // Если само слово шире maxWidth — дробим по символам
+        if (partWidth > maxWidth) {
+          let chunk = '';
+          for (const ch of part) {
+            ctx.font = buildFont(seg.bold ? 'bold' : 'normal', baseFontSize);
+            const chWidth = ctx.measureText(ch).width;
+
+            if (currentWidth + chWidth > maxWidth && chunk) {
+              currentRuns.push({ ...seg, text: chunk });
+              pushLine();
+              chunk = ch;
+              continue;
+            }
+            chunk += ch;
+            currentWidth += chWidth;
+          }
+          if (chunk) {
+            currentRuns.push({ ...seg, text: chunk });
+          }
+          continue;
+        }
+
+        // Перенос целого слова (не помещается)
+        pushLine();
+        if (isSpace) continue; // пропуск ведущего пробела
+        currentRuns.push({ ...seg, text: part });
+        currentWidth = partWidth;
+      } else {
+        // Помещается в текущую строку
+        currentRuns.push({ ...seg, text: part });
+        currentWidth += partWidth;
+      }
+    }
   }
-  
+
+  pushLine();
   return lines;
 }
 
-// УЛУЧШЕННАЯ функция для рендеринга текста с подчеркиванием, жирным и цветом
-function renderTextWithUnderline(ctx, text, x, y, maxWidth, slide, brandColor) {
-  // Проверяем есть ли подчеркивание в тексте
-  if (!text.includes('__')) {
-    // Если нет подчеркивания, используем обычный wrapText
-    const lines = wrapText(ctx, text, maxWidth);
-    lines.forEach((line, index) => {
-      ctx.fillText(line, x, y + index * 90);
-    });
-    return lines.length;
-  }
-  
-  // Сохраняем оригинальные значения
-  const originalFillStyle = ctx.fillStyle;
-  const originalFont = ctx.font;
-  
-  // Разбиваем текст на части с подчеркиванием и без
-  const parts = text.split(/(__[^_]+__)/);
-  let currentY = y;
-  let currentLine = '';
-  let currentX = x;
-  
-  parts.forEach(part => {
-    if (part.startsWith('__') && part.endsWith('__')) {
-      // Это подчеркнутый текст
-      let underlineText = part.slice(2, -2);
-      let isBold = false;
-      
-      // Проверяем есть ли жирный шрифт внутри подчеркивания
-      if (underlineText.startsWith('**') && underlineText.endsWith('**')) {
-        underlineText = underlineText.slice(2, -2);
-        isBold = true;
+// ================== RICH TEXT RENDER ==================
+/**
+ * renderRichText:
+ *  - rawText: строка
+ *  - возвращает количество строк (для смещения y)
+ */
+function renderRichText(ctx, rawText, x, startY, maxWidth, fontConf, baseColor, accentColor, slideIsAccent) {
+  if (!rawText) return 0;
+
+  const { size: baseFontSize, lineHeightRatio } = fontConf;
+  const lineHeight = Math.round(baseFontSize * lineHeightRatio);
+
+  const segments = parseInline(rawText);
+  ctx.font = buildFont('normal', baseFontSize);
+  const lines = wrapSegments(ctx, segments, maxWidth, baseFontSize);
+
+  const underlineStrokes = [];
+  let y = startY;
+
+  for (const line of lines) {
+    let cursorX = x;
+
+    for (const run of line.runs) {
+      const txt = run.text;
+      const isSpace = /^\s+$/.test(txt);
+      const weight = run.bold ? 'bold' : 'normal';
+      ctx.font = buildFont(weight, baseFontSize);
+
+      const useAccent = run.underline && run.bold && !slideIsAccent;
+      ctx.fillStyle = useAccent ? accentColor : baseColor;
+
+      if (!isSpace) {
+        ctx.textBaseline = 'alphabetic';
+        ctx.fillText(txt, cursorX, y);
+        // Подчёркивание
+        if (run.underline) {
+          const metrics = ctx.measureText(txt);
+          const underlineY = y + (metrics.actualBoundingBoxDescent || baseFontSize * 0.15) - 2;
+            underlineStrokes.push({
+            x1: cursorX,
+            x2: cursorX + metrics.width,
+            y: underlineY,
+            color: ctx.fillStyle
+          });
+        }
       }
-      
-      // Проверяем поместится ли в текущую строку
-      const testLine = currentLine + underlineText;
-      const testWidth = ctx.measureText(testLine).width;
-      
-      if (testWidth > maxWidth && currentLine) {
-        // Рендерим текущую строку и переходим на новую
-        ctx.fillText(currentLine, x, currentY);
-        currentY += 90;
-        currentLine = '';
-        currentX = x;
-      }
-      
-      // 🎨 НОВАЯ ЛОГИКА: Устанавливаем цвет для __**текста**__
-      if (isBold && slide.color === 'default') {
-        // На белом фоне __**текст**__ окрашиваем в акцентный цвет
-        ctx.fillStyle = brandColor;
-      } else {
-        // Обычный цвет текста
-        ctx.fillStyle = originalFillStyle;
-      }
-      
-      // Устанавливаем жирный шрифт если нужно
-      if (isBold) {
-        ctx.font = ctx.font.replace('normal', 'bold');
-      }
-      
-      // Рендерим подчеркнутый текст
-      const startX = x + ctx.measureText(currentLine).width;
-      ctx.fillText(underlineText, startX, currentY);
-      
-      // Рисуем подчеркивание ТЕМ ЖЕ цветом что и текст
-      const textWidth = ctx.measureText(underlineText).width;
-      ctx.beginPath();
-      ctx.moveTo(startX, currentY + 8);
-      ctx.lineTo(startX + textWidth, currentY + 8);
-      ctx.strokeStyle = ctx.fillStyle; // Используем тот же цвет
-      ctx.lineWidth = 3;
-      ctx.stroke();
-      
-      // Возвращаем оригинальные настройки
-      ctx.font = originalFont;
-      ctx.fillStyle = originalFillStyle;
-      
-      currentLine += underlineText;
-    } else {
-      // Обычный текст
-      currentLine += part;
+      const w = ctx.measureText(txt).width;
+      cursorX += w;
     }
-  });
-  
-  // Рендерим последнюю строку если есть
-  if (currentLine) {
-    ctx.fillText(currentLine, x, currentY);
-    currentY += 90;
+    y += lineHeight;
   }
-  
-  return Math.ceil((currentY - y) / 90);
+
+  // Отрисовываем подчеркивания поверх
+  ctx.lineWidth = Math.max(3, Math.round(baseFontSize * 0.045));
+  underlineStrokes.forEach(st => {
+    ctx.strokeStyle = st.color;
+    ctx.beginPath();
+    ctx.moveTo(st.x1, st.y);
+    ctx.lineTo(st.x2, st.y);
+    ctx.stroke();
+  });
+
+  return lines.length;
 }
 
+// ================== MARKDOWN PARSE ==================
 function parseMarkdownToSlides(text) {
   const tokens = marked.lexer(text);
   const slides = [];
@@ -228,15 +265,13 @@ function parseMarkdownToSlides(text) {
     if (token.type === 'heading' && token.depth === 1) {
       const nextToken = tokens[index + 1];
       const subtitle = (nextToken && nextToken.type === 'paragraph') ? nextToken.text : '';
-      
       slides.push({
         type: 'intro',
         title: token.text,
         text: subtitle,
         color: 'accent'
       });
-    } 
-    else if (token.type === 'heading' && token.depth === 2) {
+    } else if (token.type === 'heading' && token.depth === 2) {
       currentSlide = {
         type: 'text',
         title: token.text,
@@ -245,8 +280,7 @@ function parseMarkdownToSlides(text) {
         content: []
       };
       slides.push(currentSlide);
-    } 
-    else if (token.type === 'blockquote') {
+    } else if (token.type === 'blockquote') {
       const quoteText = token.tokens?.[0]?.text || '';
       slides.push({
         type: 'quote',
@@ -254,36 +288,34 @@ function parseMarkdownToSlides(text) {
         color: 'accent',
         size: quoteText.length > 100 ? 'small' : 'large'
       });
-    } 
-    else if (currentSlide && (token.type === 'paragraph' || token.type === 'list')) {
+    } else if (currentSlide && (token.type === 'paragraph' || token.type === 'list')) {
       if (token.type === 'paragraph') {
         currentSlide.content.push({ type: 'paragraph', text: token.text });
       } else if (token.type === 'list') {
         currentSlide.content.push({
           type: 'list',
-          items: token.items.map(item => item.text)
+            items: token.items.map(item => item.text)
         });
       }
     }
   });
 
-  // Объединяем контент
+  // Объединяем
   slides.forEach(slide => {
     if (slide.content) {
       const paragraphs = slide.content.filter(c => c.type === 'paragraph').map(c => c.text);
       const lists = slide.content.filter(c => c.type === 'list');
-      
+
       let fullText = '';
-      if (paragraphs.length > 0) {
+      if (paragraphs.length) {
         fullText += paragraphs.join('\n\n');
       }
-      if (lists.length > 0) {
+      if (lists.length) {
         if (fullText) fullText += '\n\n';
         lists.forEach(list => {
           fullText += list.items.map(item => `• ${item}`).join('\n');
         });
       }
-      
       slide.text = fullText;
       delete slide.content;
     }
@@ -292,15 +324,11 @@ function parseMarkdownToSlides(text) {
   return slides;
 }
 
-// Функция для добавления финального слайда
+// ================== FINAL SLIDE ==================
 function addFinalSlide(slides, settings) {
   const finalSlideConfig = settings.finalSlide;
-  
-  if (!finalSlideConfig || !finalSlideConfig.enabled) {
-    return slides; // Если не включен, возвращаем как есть
-  }
-  
-  // Готовые шаблоны
+  if (!finalSlideConfig || !finalSlideConfig.enabled) return slides;
+
   const templates = {
     cta: {
       title: 'Подписывайтесь!',
@@ -318,21 +346,17 @@ function addFinalSlide(slides, settings) {
       color: 'accent'
     }
   };
-  
+
   let finalSlide;
-  
   if (finalSlideConfig.type && templates[finalSlideConfig.type]) {
-    // Используем готовый шаблон
     finalSlide = {
       type: 'text',
       ...templates[finalSlideConfig.type],
-      // Переопределяем если указаны кастомные значения
       ...(finalSlideConfig.title && { title: finalSlideConfig.title }),
       ...(finalSlideConfig.text && { text: finalSlideConfig.text }),
       ...(finalSlideConfig.color && { color: finalSlideConfig.color })
     };
   } else {
-    // Кастомный слайд
     finalSlide = {
       type: 'text',
       title: finalSlideConfig.title || 'Спасибо за внимание!',
@@ -340,78 +364,188 @@ function addFinalSlide(slides, settings) {
       color: finalSlideConfig.color || 'accent'
     };
   }
-  
   return [...slides, finalSlide];
 }
 
+// ================== SLIDE RENDERERS ==================
+function renderIntroSlide(ctx, slide, contentY, contentWidth) {
+  const titleStyle = getFontStyle(CONFIG.FONTS.TITLE_INTRO);
+  ctx.font = titleStyle.fontCSS;
+  ctx.textAlign = 'left';
+  const titleLines = wrapPlainForIntro(ctx, slide.title || '', contentWidth);
+  let y = contentY;
+
+  titleLines.forEach(line => {
+    ctx.fillText(line, CONFIG.CANVAS.PADDING, y);
+    y += titleStyle.lineHeight;
+  });
+
+  if (slide.text) {
+    const subtitleStyle = getFontStyle(CONFIG.FONTS.SUBTITLE_INTRO);
+    ctx.font = subtitleStyle.fontCSS;
+    ctx.globalAlpha = 0.9;
+    y += CONFIG.SPACING.H2_TO_P;
+    const lines = wrapPlainForIntro(ctx, slide.text, contentWidth);
+    lines.forEach(line => {
+      ctx.fillText(line, CONFIG.CANVAS.PADDING, y);
+      y += subtitleStyle.lineHeight;
+    });
+    ctx.globalAlpha = 1;
+  }
+}
+
+function wrapPlainForIntro(ctx, text, maxWidth) {
+  if (!text) return [];
+  const words = text.replace(/[*_]/g, '').split(/\s+/);
+  const lines = [];
+  let line = '';
+  for (const w of words) {
+    const test = line ? line + ' ' + w : w;
+    if (ctx.measureText(test).width <= maxWidth) {
+      line = test;
+    } else {
+      if (line) lines.push(line);
+      line = w;
+    }
+  }
+  if (line) lines.push(line);
+  return lines;
+}
+
+function renderTextSlide(ctx, slide, contentY, contentWidth, brandColor) {
+  let y = contentY;
+  // Title
+  if (slide.title) {
+    const titleStyle = getFontStyle(CONFIG.FONTS.TITLE_TEXT_WITH_CONTENT);
+    ctx.font = titleStyle.fontCSS;
+    ctx.textAlign = 'left';
+    const lines = wrapPlainForIntro(ctx, slide.title, contentWidth);
+    lines.forEach(l => {
+      ctx.fillText(l, CONFIG.CANVAS.PADDING, y);
+      y += titleStyle.lineHeight;
+    });
+    y += CONFIG.SPACING.H2_TO_P;
+  }
+
+  if (slide.text) {
+    const baseFont = CONFIG.FONTS.TEXT;
+    const paragraphs = slide.text.split('\n').filter(l => l.trim());
+
+    paragraphs.forEach((rawLine, idx) => {
+      const isBullet = rawLine.trim().startsWith('•');
+      let lineText = rawLine.trim();
+      let x = CONFIG.CANVAS.PADDING;
+      let maxW = contentWidth;
+
+      if (isBullet) {
+        // Рендер маркера
+        const marker = '→';
+        ctx.font = buildFont('bold', baseFont.size);
+        ctx.fillText(marker, x, y);
+        const markerWidth = ctx.measureText(marker + ' ').width;
+        x += markerWidth + 32;
+        maxW -= (markerWidth + 32);
+        lineText = lineText.replace(/^•\s*/, '');
+      }
+
+      const usedLines = renderRichText(
+        ctx,
+        lineText,
+        x,
+        y,
+        maxW,
+        baseFont,
+        ctx.fillStyle,
+        brandColor,
+        slide.color === 'accent'
+      );
+
+      y += usedLines * Math.round(baseFont.size * baseFont.lineHeightRatio);
+      if (idx !== paragraphs.length - 1) {
+        y += CONFIG.SPACING.P_TO_P;
+      }
+    });
+  }
+}
+
+function renderQuoteSlide(ctx, slide, contentY, contentHeight, contentWidth) {
+  ctx.textAlign = 'left';
+  const isSmall = slide.size === 'small';
+  const quoteFont = isSmall ? CONFIG.FONTS.QUOTE_SMALL : CONFIG.FONTS.QUOTE_LARGE;
+  const { fontCSS, lineHeight } = getFontStyle(quoteFont);
+  ctx.font = fontCSS;
+
+  const lines = wrapPlainForIntro(ctx, slide.text || '', contentWidth);
+  let y = contentY + (contentHeight - lines.length * lineHeight) / 2;
+  lines.forEach(l => {
+    ctx.fillText(l, CONFIG.CANVAS.PADDING, y);
+    y += lineHeight;
+  });
+}
+
+// ================== MAIN RENDER FUNCTION ==================
 async function renderSlideToCanvas(slide, slideNumber, totalSlides, settings, avatarImage = null) {
   const {
     brandColor = CONFIG.COLORS.ACCENT_FALLBACK,
     authorUsername = '@username',
-    authorFullName = 'Your Name',
-    avatarUrl = null
+    authorFullName = 'Your Name'
   } = settings;
 
   const canvas = createCanvas(CONFIG.CANVAS.WIDTH, CONFIG.CANVAS.HEIGHT);
   const ctx = canvas.getContext('2d');
-  
-  // Цвета
+
+  // Background
   const isAccent = slide.color === 'accent';
   const bgColor = isAccent ? brandColor : CONFIG.COLORS.DEFAULT_BG;
   const textColor = isAccent ? CONFIG.COLORS.DEFAULT_BG : CONFIG.COLORS.DEFAULT_TEXT;
-  
-  // Фон с закругленными углами
+
   ctx.fillStyle = bgColor;
-  ctx.beginPath();
-  ctx.roundRect(0, 0, CONFIG.CANVAS.WIDTH, CONFIG.CANVAS.HEIGHT, CONFIG.CANVAS.BORDER_RADIUS);
-  ctx.fill();
-  
+  if (ctx.roundRect) {
+    ctx.beginPath();
+    ctx.roundRect(0, 0, CONFIG.CANVAS.WIDTH, CONFIG.CANVAS.HEIGHT, CONFIG.CANVAS.BORDER_RADIUS);
+    ctx.fill();
+  } else {
+    ctx.fillRect(0, 0, CONFIG.CANVAS.WIDTH, CONFIG.CANVAS.HEIGHT);
+  }
+
   ctx.fillStyle = textColor;
-  
-  // Header - с аватаркой или без
+
+  // Header
   const headerFooter = getFontStyle(CONFIG.FONTS.HEADER_FOOTER);
   ctx.font = headerFooter.fontCSS;
   ctx.globalAlpha = 0.7;
-  
+  ctx.textAlign = 'left';
+
   const avatarSize = 100;
   const avatarPadding = 16;
-  
+
   if (avatarImage) {
-    // Вычисляем позицию для центрирования аватарки с текстом
     const textBaseline = CONFIG.CANVAS.HEADER_FOOTER_PADDING;
-    const avatarY = textBaseline - avatarSize/2 - 9; // Поднято выше
-    
-    // Рендерим аватарку
+    const avatarY = textBaseline - avatarSize / 2 - 9;
     renderAvatar(ctx, avatarImage, CONFIG.CANVAS.PADDING, avatarY, avatarSize);
-    
-    // Username справа от аватарки
-    ctx.textAlign = 'left';
     ctx.fillText(authorUsername, CONFIG.CANVAS.PADDING + avatarSize + avatarPadding, CONFIG.CANVAS.HEADER_FOOTER_PADDING);
   } else {
-    // Обычный header без аватарки
-    ctx.textAlign = 'left';
     ctx.fillText(authorUsername, CONFIG.CANVAS.PADDING, CONFIG.CANVAS.HEADER_FOOTER_PADDING);
   }
-  
-  // Номер слайда (всегда справа)
+
   ctx.textAlign = 'right';
   ctx.fillText(`${slideNumber}/${totalSlides}`, CONFIG.CANVAS.WIDTH - CONFIG.CANVAS.PADDING, CONFIG.CANVAS.HEADER_FOOTER_PADDING);
   ctx.globalAlpha = 1;
 
-  // Content area - начинается с правильного отступа
+  // Content
   const contentY = CONFIG.CANVAS.CONTENT_START_Y;
   const contentHeight = CONFIG.CANVAS.HEIGHT - contentY - CONFIG.CANVAS.HEADER_FOOTER_PADDING;
   const contentWidth = CONFIG.CANVAS.WIDTH - (CONFIG.CANVAS.PADDING * 2);
-  
+
   if (slide.type === 'intro') {
-    renderIntroSlide(ctx, slide, contentY, contentHeight, contentWidth, brandColor);
+    renderIntroSlide(ctx, slide, contentY, contentWidth);
   } else if (slide.type === 'text') {
     renderTextSlide(ctx, slide, contentY, contentWidth, brandColor);
   } else if (slide.type === 'quote') {
     renderQuoteSlide(ctx, slide, contentY, contentHeight, contentWidth);
   }
 
-  // Footer - отступ по формуле ×4 от веб-версии
+  // Footer
   ctx.font = headerFooter.fontCSS;
   ctx.globalAlpha = 0.7;
   ctx.textAlign = 'left';
@@ -425,127 +559,14 @@ async function renderSlideToCanvas(slide, slideNumber, totalSlides, settings, av
   return canvas;
 }
 
-function renderIntroSlide(ctx, slide, contentY, contentHeight, contentWidth, brandColor) {
-  // Заголовок h1 - начинается с 420px по левому краю
-  const titleStyle = getFontStyle(CONFIG.FONTS.TITLE_INTRO);
-  ctx.font = titleStyle.fontCSS;
-  ctx.textAlign = 'left';
-  const titleLines = wrapText(ctx, slide.title || '', contentWidth);
-  let y = contentY; // Начинаем с 420px
-  
-  titleLines.forEach(line => {
-    ctx.fillText(line, CONFIG.CANVAS.PADDING, y);
-    y += titleStyle.lineHeight;
-  });
+// ================== EXPRESS APP ==================
+const app = express();
+app.use(express.json({ limit: '10mb' }));
 
-  // Подзаголовок p - БОЛЬШОЙ отступ как между блоками
-  if (slide.text) {
-    const subtitleStyle = getFontStyle(CONFIG.FONTS.SUBTITLE_INTRO);
-    ctx.font = subtitleStyle.fontCSS;
-    ctx.textAlign = 'left';
-    ctx.globalAlpha = 0.9;
-    y += CONFIG.SPACING.H2_TO_P; // 80px отступ между блоками
-    const subtitleLines = wrapText(ctx, slide.text, contentWidth);
-    subtitleLines.forEach(line => {
-      ctx.fillText(line, CONFIG.CANVAS.PADDING, y);
-      y += subtitleStyle.lineHeight;
-    });
-    ctx.globalAlpha = 1;
-  }
-}
-
-function renderTextSlide(ctx, slide, contentY, contentWidth, brandColor) {
-  let y = contentY; // Начинаем с 420px
-  
-  // Заголовок h2 с margin-bottom
-  if (slide.title) {
-    const titleStyle = getFontStyle(CONFIG.FONTS.TITLE_TEXT_WITH_CONTENT);
-    ctx.font = titleStyle.fontCSS;
-    ctx.textAlign = 'left';
-    
-    const titleLines = wrapText(ctx, slide.title, contentWidth);
-    titleLines.forEach(line => {
-      ctx.fillText(line, CONFIG.CANVAS.PADDING, y);
-      y += titleStyle.lineHeight;
-    });
-    
-    // h2 имеет БОЛЬШОЙ margin-bottom: 80px (отступ между блоками)
-    y += CONFIG.SPACING.H2_TO_P; // 80px
-  }
-
-  // Основной текст с поддержкой подчеркивания и ЦВЕТНОГО текста
-  if (slide.text) {
-    const textStyle = getFontStyle(CONFIG.FONTS.TEXT);
-    ctx.font = textStyle.fontCSS;
-    ctx.textAlign = 'left';
-    
-    const textLines = slide.text.split('\n').filter(line => line.trim());
-    
-    textLines.forEach((line, lineIndex) => {
-      const isLastLine = lineIndex === textLines.length - 1;
-      
-      if (line.trim().startsWith('•')) {
-        const itemText = line.replace(/^•\s*/, '');
-        // Рендерим с подчеркиванием и ЦВЕТОМ если есть
-        if (itemText.includes('__')) {
-          renderTextWithUnderline(ctx, '→ ' + itemText, CONFIG.CANVAS.PADDING, y, contentWidth, slide, brandColor);
-          y += textStyle.lineHeight;
-        } else {
-          const wrappedLines = wrapText(ctx, '→ ' + itemText, contentWidth);
-          wrappedLines.forEach(wrappedLine => {
-            ctx.fillText(wrappedLine, CONFIG.CANVAS.PADDING, y);
-            y += textStyle.lineHeight;
-          });
-        }
-        
-        // МАЛЕНЬКИЙ отступ между пунктами списка
-        if (!isLastLine) {
-          y += CONFIG.SPACING.P_TO_P; // 24px - внутри одного блока
-        }
-      } else if (line.trim()) {
-        // Рендерим параграф с подчеркиванием и ЦВЕТОМ если есть
-        if (line.includes('__')) {
-          renderTextWithUnderline(ctx, line.trim(), CONFIG.CANVAS.PADDING, y, contentWidth, slide, brandColor);
-          y += textStyle.lineHeight;
-        } else {
-          const wrappedLines = wrapText(ctx, line.trim(), contentWidth);
-          wrappedLines.forEach(wrappedLine => {
-            ctx.fillText(wrappedLine, CONFIG.CANVAS.PADDING, y);
-            y += textStyle.lineHeight;
-          });
-        }
-        
-        // МАЛЕНЬКИЙ отступ между параграфами
-        if (!isLastLine) {
-          y += CONFIG.SPACING.P_TO_P; // 24px - внутри одного блока
-        }
-      }
-    });
-  }
-}
-
-function renderQuoteSlide(ctx, slide, contentY, contentHeight, contentWidth) {
-  ctx.textAlign = 'left'; // Цитаты тоже по левому краю (современный подход)
-  
-  const isSmall = slide.size === 'small';
-  const quoteStyle = getFontStyle(isSmall ? CONFIG.FONTS.QUOTE_SMALL : CONFIG.FONTS.QUOTE_LARGE);
-  ctx.font = quoteStyle.fontCSS;
-  
-  const quoteLines = wrapText(ctx, slide.text || '', contentWidth);
-  // Цитаты начинаются с 450px и центрируются в оставшемся пространстве
-  let y = contentY + (contentHeight - quoteLines.length * quoteStyle.lineHeight) / 2;
-  
-  quoteLines.forEach(line => {
-    ctx.fillText(line, CONFIG.CANVAS.PADDING, y); // По левому краю
-    y += quoteStyle.lineHeight;
-  });
-}
-
-// API Routes
 app.get('/health', (req, res) => {
-  res.json({ 
+  res.json({
     status: 'production-ready',
-    engine: 'canvas-api-with-colored-underline',
+    engine: 'canvas-api-rich-text',
     performance: 'optimized',
     memory: 'efficient'
   });
@@ -553,27 +574,23 @@ app.get('/health', (req, res) => {
 
 app.post('/api/generate-carousel', async (req, res) => {
   const startTime = Date.now();
-  console.log('🎯 Генерация через Canvas API с цветным подчеркиванием...');
-  
   try {
     const { text, settings = {} } = req.body;
-    
     if (!text) {
       return res.status(400).json({ error: 'Требуется текст' });
     }
 
-    // ОПТИМИЗАЦИЯ: Загружаем аватарку ОДИН раз в начале
+    // Аватарка (один раз)
     let avatarImage = null;
     if (settings.avatarUrl) {
-      console.log('🖼️ Загружаем аватарку один раз для всех слайдов...');
       avatarImage = await loadAvatarImage(settings.avatarUrl);
     }
 
-    // Парсинг и добавление финального слайда
+    // Парсинг + финальный слайд
     let slides = parseMarkdownToSlides(text);
-    slides = addFinalSlide(slides, settings); // Добавляем финальный слайд
-    
-    if (slides.length === 0) {
+    slides = addFinalSlide(slides, settings);
+
+    if (!slides.length) {
       slides.push({
         type: 'text',
         title: 'Ваш контент',
@@ -582,20 +599,13 @@ app.post('/api/generate-carousel', async (req, res) => {
       });
     }
 
-    console.log(`📝 Создано слайдов: ${slides.length} ${settings.finalSlide?.enabled ? '(включая финальный)' : ''}`);
-
-    // Рендеринг с переиспользованием аватарки
     const images = [];
     for (let i = 0; i < slides.length; i++) {
-      // Передаем уже загруженную аватарку
       const canvas = await renderSlideToCanvas(slides[i], i + 1, slides.length, settings, avatarImage);
-      const base64 = canvas.toBuffer('image/png').toString('base64');
-      images.push(base64);
+      images.push(canvas.toBuffer('image/png').toString('base64'));
     }
 
     const processingTime = Date.now() - startTime;
-    console.log(`🚀 Завершено за ${processingTime}ms`);
-
     res.json({
       slides,
       images,
@@ -604,16 +614,12 @@ app.post('/api/generate-carousel', async (req, res) => {
         generatedAt: new Date().toISOString(),
         processingTime,
         settings,
-        engine: 'canvas-api-production-with-colored-underline'
+        engine: 'canvas-api-rich-text'
       }
     });
-
-  } catch (error) {
-    console.error('❌ Ошибка:', error);
-    res.status(500).json({ 
-      error: error.message,
-      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
-    });
+  } catch (e) {
+    console.error('Ошибка генерации:', e);
+    res.status(500).json({ error: e.message });
   }
 });
 
@@ -626,5 +632,5 @@ process.on('SIGTERM', () => {
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => {
   console.log(`🚀 PRODUCTION Canvas API на порту ${PORT}`);
-  console.log(`🎨 С поддержкой цветного подчеркивания!`);
+  console.log(`🎨 Улучшенный механизм переноса и подчёркивания готов.`);
 });
