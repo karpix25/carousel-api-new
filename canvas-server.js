@@ -1,8 +1,8 @@
-console.log('🎯 ФИНАЛЬНАЯ ПРОДАКШН ВЕРСИЯ - Canvas API');
+console.log('🎯 ФИНАЛЬНАЯ ПРОДАКШН ВЕРСИЯ - Canvas API с цветным подчеркиванием');
 
 const express = require('express');
 const { marked } = require('marked');
-const { createCanvas, loadImage } = require('canvas'); // ИСПРАВЛЕНО: импортируем loadImage из canvas
+const { createCanvas, loadImage } = require('canvas');
 
 const app = express();
 app.use(express.json({ limit: '10mb' }));
@@ -43,7 +43,7 @@ const CONFIG = {
 async function loadAvatarImage(url) {
   try {
     console.log('🖼️ Загружаем аватарку:', url);
-    const image = await loadImage(url); // Используем loadImage из canvas
+    const image = await loadImage(url);
     console.log('✅ Аватарка загружена успешно');
     return image;
   } catch (error) {
@@ -126,8 +126,8 @@ function wrapText(ctx, text, maxWidth) {
   return lines;
 }
 
-// Простая функция для рендеринга текста с подчеркиванием и жирным
-function renderTextWithUnderline(ctx, text, x, y, maxWidth) {
+// УЛУЧШЕННАЯ функция для рендеринга текста с подчеркиванием, жирным и цветом
+function renderTextWithUnderline(ctx, text, x, y, maxWidth, slide, brandColor) {
   // Проверяем есть ли подчеркивание в тексте
   if (!text.includes('__')) {
     // Если нет подчеркивания, используем обычный wrapText
@@ -137,6 +137,10 @@ function renderTextWithUnderline(ctx, text, x, y, maxWidth) {
     });
     return lines.length;
   }
+  
+  // Сохраняем оригинальные значения
+  const originalFillStyle = ctx.fillStyle;
+  const originalFont = ctx.font;
   
   // Разбиваем текст на части с подчеркиванием и без
   const parts = text.split(/(__[^_]+__)/);
@@ -168,8 +172,16 @@ function renderTextWithUnderline(ctx, text, x, y, maxWidth) {
         currentX = x;
       }
       
+      // 🎨 НОВАЯ ЛОГИКА: Устанавливаем цвет для __**текста**__
+      if (isBold && slide.color === 'default') {
+        // На белом фоне __**текст**__ окрашиваем в акцентный цвет
+        ctx.fillStyle = brandColor;
+      } else {
+        // Обычный цвет текста
+        ctx.fillStyle = originalFillStyle;
+      }
+      
       // Устанавливаем жирный шрифт если нужно
-      const originalFont = ctx.font;
       if (isBold) {
         ctx.font = ctx.font.replace('normal', 'bold');
       }
@@ -178,17 +190,18 @@ function renderTextWithUnderline(ctx, text, x, y, maxWidth) {
       const startX = x + ctx.measureText(currentLine).width;
       ctx.fillText(underlineText, startX, currentY);
       
-      // Рисуем подчеркивание
+      // Рисуем подчеркивание ТЕМ ЖЕ цветом что и текст
       const textWidth = ctx.measureText(underlineText).width;
       ctx.beginPath();
       ctx.moveTo(startX, currentY + 8);
       ctx.lineTo(startX + textWidth, currentY + 8);
-      ctx.strokeStyle = ctx.fillStyle;
+      ctx.strokeStyle = ctx.fillStyle; // Используем тот же цвет
       ctx.lineWidth = 3;
       ctx.stroke();
       
-      // Возвращаем обычный шрифт
+      // Возвращаем оригинальные настройки
       ctx.font = originalFont;
+      ctx.fillStyle = originalFillStyle;
       
       currentLine += underlineText;
     } else {
@@ -336,14 +349,11 @@ async function renderSlideToCanvas(slide, slideNumber, totalSlides, settings, av
     brandColor = CONFIG.COLORS.ACCENT_FALLBACK,
     authorUsername = '@username',
     authorFullName = 'Your Name',
-    avatarUrl = null // Новый параметр для аватарки
+    avatarUrl = null
   } = settings;
 
   const canvas = createCanvas(CONFIG.CANVAS.WIDTH, CONFIG.CANVAS.HEIGHT);
   const ctx = canvas.getContext('2d');
-  
-  // ОПТИМИЗАЦИЯ: Используем переданную аватарку вместо загрузки каждый раз
-  // avatarImage уже загружена один раз в main функции
   
   // Цвета
   const isAccent = slide.color === 'accent';
@@ -394,9 +404,9 @@ async function renderSlideToCanvas(slide, slideNumber, totalSlides, settings, av
   const contentWidth = CONFIG.CANVAS.WIDTH - (CONFIG.CANVAS.PADDING * 2);
   
   if (slide.type === 'intro') {
-    renderIntroSlide(ctx, slide, contentY, contentHeight, contentWidth);
+    renderIntroSlide(ctx, slide, contentY, contentHeight, contentWidth, brandColor);
   } else if (slide.type === 'text') {
-    renderTextSlide(ctx, slide, contentY, contentWidth);
+    renderTextSlide(ctx, slide, contentY, contentWidth, brandColor);
   } else if (slide.type === 'quote') {
     renderQuoteSlide(ctx, slide, contentY, contentHeight, contentWidth);
   }
@@ -415,7 +425,7 @@ async function renderSlideToCanvas(slide, slideNumber, totalSlides, settings, av
   return canvas;
 }
 
-function renderIntroSlide(ctx, slide, contentY, contentHeight, contentWidth) {
+function renderIntroSlide(ctx, slide, contentY, contentHeight, contentWidth, brandColor) {
   // Заголовок h1 - начинается с 420px по левому краю
   const titleStyle = getFontStyle(CONFIG.FONTS.TITLE_INTRO);
   ctx.font = titleStyle.fontCSS;
@@ -444,7 +454,7 @@ function renderIntroSlide(ctx, slide, contentY, contentHeight, contentWidth) {
   }
 }
 
-function renderTextSlide(ctx, slide, contentY, contentWidth) {
+function renderTextSlide(ctx, slide, contentY, contentWidth, brandColor) {
   let y = contentY; // Начинаем с 420px
   
   // Заголовок h2 с margin-bottom
@@ -463,7 +473,7 @@ function renderTextSlide(ctx, slide, contentY, contentWidth) {
     y += CONFIG.SPACING.H2_TO_P; // 80px
   }
 
-  // Основной текст с поддержкой подчеркивания
+  // Основной текст с поддержкой подчеркивания и ЦВЕТНОГО текста
   if (slide.text) {
     const textStyle = getFontStyle(CONFIG.FONTS.TEXT);
     ctx.font = textStyle.fontCSS;
@@ -476,9 +486,9 @@ function renderTextSlide(ctx, slide, contentY, contentWidth) {
       
       if (line.trim().startsWith('•')) {
         const itemText = line.replace(/^•\s*/, '');
-        // Рендерим с подчеркиванием если есть
+        // Рендерим с подчеркиванием и ЦВЕТОМ если есть
         if (itemText.includes('__')) {
-          renderTextWithUnderline(ctx, '→ ' + itemText, CONFIG.CANVAS.PADDING, y, contentWidth);
+          renderTextWithUnderline(ctx, '→ ' + itemText, CONFIG.CANVAS.PADDING, y, contentWidth, slide, brandColor);
           y += textStyle.lineHeight;
         } else {
           const wrappedLines = wrapText(ctx, '→ ' + itemText, contentWidth);
@@ -493,9 +503,9 @@ function renderTextSlide(ctx, slide, contentY, contentWidth) {
           y += CONFIG.SPACING.P_TO_P; // 24px - внутри одного блока
         }
       } else if (line.trim()) {
-        // Рендерим параграф с подчеркиванием если есть
+        // Рендерим параграф с подчеркиванием и ЦВЕТОМ если есть
         if (line.includes('__')) {
-          renderTextWithUnderline(ctx, line.trim(), CONFIG.CANVAS.PADDING, y, contentWidth);
+          renderTextWithUnderline(ctx, line.trim(), CONFIG.CANVAS.PADDING, y, contentWidth, slide, brandColor);
           y += textStyle.lineHeight;
         } else {
           const wrappedLines = wrapText(ctx, line.trim(), contentWidth);
@@ -535,7 +545,7 @@ function renderQuoteSlide(ctx, slide, contentY, contentHeight, contentWidth) {
 app.get('/health', (req, res) => {
   res.json({ 
     status: 'production-ready',
-    engine: 'canvas-api',
+    engine: 'canvas-api-with-colored-underline',
     performance: 'optimized',
     memory: 'efficient'
   });
@@ -543,7 +553,7 @@ app.get('/health', (req, res) => {
 
 app.post('/api/generate-carousel', async (req, res) => {
   const startTime = Date.now();
-  console.log('🎯 Генерация через Canvas API...');
+  console.log('🎯 Генерация через Canvas API с цветным подчеркиванием...');
   
   try {
     const { text, settings = {} } = req.body;
@@ -594,7 +604,7 @@ app.post('/api/generate-carousel', async (req, res) => {
         generatedAt: new Date().toISOString(),
         processingTime,
         settings,
-        engine: 'canvas-api-production-with-final-slide'
+        engine: 'canvas-api-production-with-colored-underline'
       }
     });
 
@@ -616,5 +626,5 @@ process.on('SIGTERM', () => {
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => {
   console.log(`🚀 PRODUCTION Canvas API на порту ${PORT}`);
-  console.log(`⚡ Готов к высоким нагрузкам`);
+  console.log(`🎨 С поддержкой цветного подчеркивания!`);
 });
