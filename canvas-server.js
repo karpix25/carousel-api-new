@@ -314,12 +314,16 @@ async function renderSlideToCanvas(slide, slideNumber, totalSlides, settings) {
   ctx.font = headerFooter.fontCSS;
   ctx.globalAlpha = 0.7;
   
-  const avatarSize = 80; // Размер аватарки
-  const avatarPadding = 16; // Отступ между аватаркой и текстом
+  const avatarSize = 100; // ИЗМЕНЕНО: уменьшил с 48 до 40px
+  const avatarPadding = 16; // ИЗМЕНЕНО: уменьшил отступ с 16 до 12px
   
   if (avatarImage) {
+    // Вычисляем позицию для центрирования аватарки с текстом
+    const textBaseline = CONFIG.CANVAS.HEADER_FOOTER_PADDING;
+    const avatarY = textBaseline - avatarSize/2 - 9; // Центрируем относительно baseline текста
+    
     // Рендерим аватарку
-    renderAvatar(ctx, avatarImage, CONFIG.CANVAS.PADDING, CONFIG.CANVAS.HEADER_FOOTER_PADDING - avatarSize/2, avatarSize);
+    renderAvatar(ctx, avatarImage, CONFIG.CANVAS.PADDING, avatarY, avatarSize);
     
     // Username справа от аватарки
     ctx.textAlign = 'left';
