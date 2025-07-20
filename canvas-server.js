@@ -90,6 +90,26 @@ function renderAvatar(ctx, avatarImage, x, y, size) {
   ctx.restore();
 }
 
+// Функция для рендеринга SVG иконки
+async function renderSVGIcon(ctx, iconName, x, y, size, color = '#000000') {
+  if (!ICONS[iconName]) {
+    console.warn(`Иконка ${iconName} не найдена`);
+    return;
+  }
+  
+  try {
+    // Создаем SVG с заданным цветом
+    const svgString = ICONS[iconName].replace('<path d=', `<path fill="${color}" d=`);
+    const svgData = `data:image/svg+xml;base64,${Buffer.from(svgString).toString('base64')}`;
+    
+    // Загружаем и рендерим
+    const svgImage = await loadImage(svgData);
+    ctx.drawImage(svgImage, x, y, size, size);
+  } catch (error) {
+    console.warn('Ошибка рендеринга SVG:', error);
+  }
+}
+
 // ТОЧНО ваша функция + ТОЛЬКО висячие предлоги + обработка спецсимволов
 function wrapText(ctx, text, maxWidth) {
   if (!text) return [];
