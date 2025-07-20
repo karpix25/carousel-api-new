@@ -466,7 +466,7 @@ async function renderSlideToCanvas(slide, slideNumber, totalSlides, settings) {
   } else if (slide.type === 'quote') {
     renderQuoteSlide(ctx, slide, contentY, contentHeight, contentWidth);
   } else if (slide.type === 'final') {
-    await renderFinalSlide(ctx, slide, contentY, contentHeight, contentWidth, textColor);
+    renderFinalSlide(ctx, slide, contentY, contentHeight, contentWidth, textColor); // Убрали await
   }
 
   // Footer - отступ по формуле ×4 от веб-версии
